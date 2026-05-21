@@ -2,21 +2,20 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from sqlalchemy import text as sa_text
 
-from app.config import settings
-from app.database import engine, get_db
-from app.redis_client import redis_client, redis_health_check
+from app.database import async_session, engine
+from app.redis_client import redis_client
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup: verify DB and Redis connectivity
-    from app.database import async_session
 
     db_ok = False
     try:
         async with async_session() as session:
-            await session.execute(__import__("sqlalchemy").text("SELECT 1"))
+            await session.execute(sa_text("SELECT 1"))
             db_ok = True
     except Exception:
         db_ok = False
@@ -53,10 +52,8 @@ async def health():
 
     # Check DB
     try:
-        from app.database import async_session
-
         async with async_session() as session:
-            await session.execute(__import__("sqlalchemy").text("SELECT 1"))
+            await session.execute(sa_text("SELECT 1"))
     except Exception:
         db_status = "error"
 

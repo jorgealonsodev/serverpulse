@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
-from uuid import UUID, uuid4
+from datetime import datetime
+from uuid import UUID
 
 from sqlalchemy import DateTime, String, text
 from sqlalchemy.dialects.postgresql import UUID as PG_UUID
