@@ -1,0 +1,102 @@
+from contextlib import asynccontextmanager
+
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
+
+from app.config import settings
+from app.database import engine, get_db
+from app.redis_client import redis_client, redis_health_check
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup: verify DB and Redis connectivity
+    from app.database import async_session
+
+    db_ok = False
+    try:
+        async with async_session() as session:
+            await session.execute(__import__("sqlalchemy").text("SELECT 1"))
+            db_ok = True
+    except Exception:
+        db_ok = False
+
+    redis_ok = False
+    try:
+        redis_ok = await redis_client.ping()
+    except Exception:
+        redis_ok = False
+
+    if not db_ok:
+        raise RuntimeError("Database connection failed on startup")
+    if not redis_ok:
+        raise RuntimeError("Redis connection failed on startup")
+
+    yield
+
+    # Shutdown: dispose connections
+    await engine.dispose()
+    await redis_client.close()
+
+
+app = FastAPI(
+    title="ServerPulse API",
+    version="0.1.0",
+    lifespan=lifespan,
+)
+
+
+@app.get("/health")
+async def health():
+    db_status = "ok"
+    redis_status = "ok"
+
+    # Check DB
+    try:
+        from app.database import async_session
+
+        async with async_session() as session:
+            await session.execute(__import__("sqlalchemy").text("SELECT 1"))
+    except Exception:
+        db_status = "error"
+
+    # Check Redis
+    try:
+        if not await redis_client.ping():
+            redis_status = "error"
+    except Exception:
+        redis_status = "error"
+
+    if db_status == "ok" and redis_status == "ok":
+        return JSONResponse(
+            status_code=200,
+            content={"status": "ok", "db": db_status, "redis": redis_status},
+        )
+    return JSONResponse(
+        status_code=503,
+        content={"status": "error", "db": db_status, "redis": redis_status},
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+    )
+
+
+# ---------------------------------------------------------------------------
+# Future routers (placeholders — Fase 2+)
+# ---------------------------------------------------------------------------
+# from app.api.auth import router as auth_router
+# app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
+#
+# from app.api.servers import router as servers_router
+# app.include_router(servers_router, prefix="/api/v1/servers", tags=["servers"])
+#
+# from app.api.metrics import router as metrics_router
+# app.include_router(metrics_router, prefix="/api/v1/metrics", tags=["metrics"])
+#
+# from app.api.users import router as users_router
+# app.include_router(users_router, prefix="/api/v1/users", tags=["users"])

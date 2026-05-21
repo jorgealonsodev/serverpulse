@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-serverpulse}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-serverpulse}
+      POSTGRES_DB: ${POSTGRES_DB:-serverpulse}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-serverpulse}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - serverpulse_net
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - serverpulse_net
+
+  backend:
+    build: ./backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-serverpulse}:${POSTGRES_PASSWORD:-serverpulse}@postgres:5432/${POSTGRES_DB:-serverpulse}
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: ${JWT_SECRET:-change-me-minimum-32-bytes-long-key}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-1440}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      AGENT_TOKEN_SALT: ${AGENT_TOKEN_SALT:-serverpulse-agent-salt}
+    ports:
+      - "8000:8000"
+    networks:
+      - serverpulse_net
+
+volumes:
+  pgdata:
+
+networks:
+  serverpulse_net:
+    driver: bridge
