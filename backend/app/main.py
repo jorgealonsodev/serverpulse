@@ -86,8 +86,8 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
 # ---------------------------------------------------------------------------
 # Future routers (placeholders — Fase 2+)
 # ---------------------------------------------------------------------------
-# from app.api.auth import router as auth_router
-# app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
+from app.api.auth import router as auth_router
+app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 #
 # from app.api.servers import router as servers_router
 # app.include_router(servers_router, prefix="/api/v1/servers", tags=["servers"])

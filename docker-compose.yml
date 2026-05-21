@@ -5,6 +5,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-serverpulse}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-serverpulse}
       POSTGRES_DB: ${POSTGRES_DB:-serverpulse}
+    ports:
+      - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
