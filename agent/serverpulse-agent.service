@@ -1,0 +1,14 @@
+[Unit]
+Description=ServerPulse Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=serverpulse
+ExecStart=/usr/local/bin/serverpulse-agent
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

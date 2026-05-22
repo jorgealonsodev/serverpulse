@@ -17,6 +17,7 @@ dependencies = [
     "python-multipart",
     "httpx",
     "prometheus-fastapi-instrumentator",
+    "email-validator",
 ]
 
 [project.optional-dependencies]
