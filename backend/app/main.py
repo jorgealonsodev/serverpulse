@@ -3,9 +3,11 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from sqlalchemy import delete, text as sa_text
 
+from app.config import settings
 from app.database import async_session, engine
 from app.models.metric import Metric
 from app.redis_client import redis_client
@@ -34,20 +36,6 @@ async def lifespan(app: FastAPI):
     if not redis_ok:
         raise RuntimeError("Redis connection failed on startup")
 
-    # Spawn offline detection background task
-    from app.core.alerts import run_offline_detector
-
-    async def _offline_detector_loop():
-        while True:
-            await asyncio.sleep(30)
-            try:
-                await run_offline_detector()
-            except Exception:
-                pass
-
-    detector_task = asyncio.create_task(_offline_detector_loop())
-    app.state.detector_task = detector_task
-
     # Spawn cleanup background task
     async def _cleanup_old_metrics():
         while True:
@@ -67,12 +55,7 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Shutdown: cancel background tasks, dispose connections
-    app.state.detector_task.cancel()
-    try:
-        await app.state.detector_task
-    except asyncio.CancelledError:
-        pass
+    # Shutdown: cancel cleanup task, dispose connections
     app.state.cleanup_task.cancel()
     try:
         await app.state.cleanup_task
@@ -87,6 +70,17 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# CORS middleware for frontend dev server
+cors_origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()]
+if cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=cors_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 
 @app.get("/health")
@@ -144,7 +138,7 @@ app.include_router(metrics_router, prefix="/api/v1/metrics", tags=["metrics"])
 
 from app.api.ws import router as ws_router
 
-app.include_router(ws_router, prefix="/api/v1")
+app.include_router(ws_router, tags=["ws"])
 #
 # from app.api.users import router as users_router
 # app.include_router(users_router, prefix="/api/v1/users", tags=["users"])

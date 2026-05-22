@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: up down dev logs test lint format migrate migration backup clean
+.PHONY: up down dev logs test lint format migrate migration backup clean frontend-dev frontend-test frontend-lint frontend-format
 
 up:
 	docker compose up -d
@@ -16,12 +16,15 @@ logs:
 
 test:
 	cd backend && pytest
+	cd frontend && npm test
 
 lint:
 	cd backend && ruff check .
+	cd frontend && npm run lint
 
 format:
 	cd backend && ruff format .
+	cd frontend && npx prettier --write "src/**/*.{ts,tsx}"
 
 migrate:
 	cd backend && alembic upgrade head
@@ -32,7 +35,19 @@ migration:
 backup:
 	bash scripts/backup_db.sh
 
+frontend-dev:
+	cd frontend && npm run dev
+
+frontend-test:
+	cd frontend && npm test
+
+frontend-lint:
+	cd frontend && npm run lint
+
+frontend-format:
+	cd frontend && npx prettier --write "src/**/*.{ts,tsx}"
+
 clean:
 	docker compose down -v
 	find . -type d -name __pycache__ -exec rm -rf {} +
-	rm -rf frontend/node_modules
+	rm -rf frontend/node_modules frontend/dist
