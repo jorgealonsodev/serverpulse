@@ -88,7 +88,10 @@ async def test_ws_initial_status_on_connect(client, ws_client_factory):
     # Create a server for this user (uses global async_session)
     server, _agent_token = await _create_server_for_user(user_id, "initial-status-server")
 
-    async with ws_client_factory() as ws_client, aconnect_ws(f"/api/v1/ws?token={token}", ws_client) as ws:
+    async with (
+        ws_client_factory() as ws_client,
+        aconnect_ws(f"/api/v1/ws?token={token}", ws_client) as ws,
+    ):
         # Should receive initial status_change for the server
         msg = await asyncio.wait_for(ws.receive_json(), timeout=5.0)
         assert msg["type"] == "status_change"
@@ -182,7 +185,10 @@ async def test_ws_status_change_offline(client, ws_client_factory):
         await session.refresh(server)
         server_id = server.id
 
-    async with ws_client_factory() as ws_client, aconnect_ws(f"/api/v1/ws?token={token}", ws_client) as ws:
+    async with (
+        ws_client_factory() as ws_client,
+        aconnect_ws(f"/api/v1/ws?token={token}", ws_client) as ws,
+    ):
         # Should receive initial status_change showing offline
         msg = await asyncio.wait_for(ws.receive_json(), timeout=5.0)
         assert msg["type"] == "status_change"
