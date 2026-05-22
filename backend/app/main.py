@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy import delete, text as sa_text
 
 from app.config import settings
@@ -53,6 +54,9 @@ async def lifespan(app: FastAPI):
     cleanup_task = asyncio.create_task(_cleanup_old_metrics())
     app.state.cleanup_task = cleanup_task
 
+    # Expose Prometheus /metrics endpoint after health checks pass
+    instrumentator.expose(app, endpoint="/metrics", include_in_schema=False)
+
     yield
 
     # Shutdown: cancel cleanup task, dispose connections
@@ -70,6 +74,9 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# Prometheus instrumentation — instrument after app creation, expose in lifespan startup
+instrumentator = Instrumentator().instrument(app)
 
 # CORS middleware for frontend dev server
 cors_origins = [origin.strip() for origin in settings.CORS_ORIGINS.split(",") if origin.strip()]
