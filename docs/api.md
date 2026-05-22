@@ -1,8 +1,26 @@
 # API Reference
 
-Base URL: `http://localhost` (via Nginx proxy) or `http://localhost:8000` (direct backend).
+**All 13 endpoints + WebSocket at a glance.** Base: `http://localhost` (Nginx) or `:8000` (direct).
 
-All timestamps are ISO 8601 UTC. All IDs are UUIDs (v4).
+## Quick Reference
+
+| Method | Endpoint | Auth | Returns |
+|--------|----------|------|---------|
+| `POST` | `/api/v1/auth/register` | — | 201 `{id, email}` |
+| `POST` | `/api/v1/auth/login` | — | 200 `{access_token, token_type}` |
+| `GET` | `/api/v1/auth/me` | Bearer JWT | 200 `{id, email}` |
+| `POST` | `/api/v1/servers` | Bearer JWT | 201 `{id, name, hostname, api_token}` |
+| `GET` | `/api/v1/servers` | Bearer JWT | 200 `[{id, name, hostname, status}]` |
+| `GET` | `/api/v1/servers/{id}` | Bearer JWT | 200 server detail |
+| `DELETE` | `/api/v1/servers/{id}` | Bearer JWT | 204 |
+| `POST` | `/api/v1/servers/{id}/regenerate-token` | Bearer JWT | 200 `{api_token}` |
+| `POST` | `/api/v1/metrics/ingest` | `X-Agent-Token` header | 202 |
+| `GET` | `/api/v1/servers/{id}/metrics` | Bearer JWT | 200 `[{metric}]` |
+| `WS` | `/api/v1/ws?token=<jwt>` | JWT query param | real-time messages |
+| `GET` | `/health` | — | 200 `{status, db, redis}` |
+| `GET` | `/metrics` | — | Prometheus format |
+
+All timestamps ISO 8601 UTC. All IDs UUID v4. Status codes: `401` = not authenticated, `404` = not found, `422` = validation error.
 
 ---
 

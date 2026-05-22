@@ -1,6 +1,6 @@
 # Deployment Guide
 
-Step-by-step guide to deploy ServerPulse on a fresh Ubuntu 24.04 LTS VPS.
+**Deploy ServerPulse on a fresh Ubuntu 24.04 VPS. Estimated time: 30–45 minutes.**
 
 ## Prerequisites
 

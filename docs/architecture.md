@@ -1,6 +1,21 @@
 # Architecture
 
-## C4 Context Diagram
+**Nginx → Frontend (React) + Backend (FastAPI) → PostgreSQL + Redis. Agent pushes metrics in.**
+
+Estimated read: 3 minutes.
+
+## TL;DR
+
+| Component | Role | Tech |
+|-----------|------|------|
+| Nginx | Single entry point, reverse proxy, security headers | nginx:alpine |
+| Frontend | Dashboard with real-time charts | React 18, Vite, TypeScript, TailwindCSS, Recharts, Zustand |
+| Backend | REST API + WebSocket + metric ingestion | FastAPI, SQLAlchemy 2.0 async, Alembic |
+| PostgreSQL | Persistent storage (users, servers, metrics) | 16-alpine |
+| Redis | Pub/sub for real-time metric fan-out | 7-alpine |
+| Agent | Metric collector on monitored servers | Python 3.8+, psutil, requests |
+
+---
 
 ```mermaid
 C4Context
