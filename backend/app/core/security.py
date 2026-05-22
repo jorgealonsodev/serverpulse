@@ -1,8 +1,10 @@
-from datetime import datetime, timedelta, timezone
+import hashlib
+import secrets
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import bcrypt
-from jose import JWTError, jwt
+from jose import jwt
 
 from app.config import settings
 
@@ -24,7 +26,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def create_access_token(user_id: UUID, expires_delta: timedelta | None = None) -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if expires_delta is None:
         expires_delta = timedelta(minutes=settings.JWT_EXPIRE_MINUTES)
     payload = {
@@ -37,3 +39,11 @@ def create_access_token(user_id: UUID, expires_delta: timedelta | None = None) -
 
 def decode_token(token: str) -> dict:
     return jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
+
+
+def generate_agent_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def hash_agent_token(token: str) -> str:
+    return hashlib.sha256(f"{settings.AGENT_TOKEN_SALT}:{token}".encode()).hexdigest()

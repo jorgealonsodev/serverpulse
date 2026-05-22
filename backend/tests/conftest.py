@@ -2,6 +2,7 @@ import os
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 # Set required env vars before importing app (Settings is instantiated at import time)
@@ -18,15 +19,28 @@ from app.main import app
 
 
 @pytest.fixture
-async def client():
-    """Async test client for FastAPI app with per-test DB session."""
-    # Create a fresh engine for this test's event loop
-    test_engine = create_async_engine(
+async def test_engine():
+    """Create a fresh engine for each test."""
+    engine = create_async_engine(
         os.environ["DATABASE_URL"],
         pool_size=5,
         pool_pre_ping=True,
         echo=False,
     )
+    yield engine
+    await engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+async def clean_db(test_engine):
+    """Truncate all tables before each test to ensure isolation."""
+    async with test_engine.begin() as conn:
+        await conn.execute(text("TRUNCATE TABLE metrics, servers, users RESTART IDENTITY CASCADE"))
+
+
+@pytest.fixture
+async def client(test_engine):
+    """Async test client for FastAPI app with per-test DB session."""
     test_session_factory = async_sessionmaker(
         test_engine,
         class_=AsyncSession,
@@ -46,6 +60,4 @@ async def client():
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
 
-    # Cleanup
     app.dependency_overrides.clear()
-    await test_engine.dispose()
