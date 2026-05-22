@@ -34,6 +34,20 @@ async def lifespan(app: FastAPI):
     if not redis_ok:
         raise RuntimeError("Redis connection failed on startup")
 
+    # Spawn offline detection background task
+    from app.core.alerts import run_offline_detector
+
+    async def _offline_detector_loop():
+        while True:
+            await asyncio.sleep(30)
+            try:
+                await run_offline_detector()
+            except Exception:
+                pass
+
+    detector_task = asyncio.create_task(_offline_detector_loop())
+    app.state.detector_task = detector_task
+
     # Spawn cleanup background task
     async def _cleanup_old_metrics():
         while True:
@@ -53,7 +67,12 @@ async def lifespan(app: FastAPI):
 
     yield
 
-    # Shutdown: cancel cleanup task, dispose connections
+    # Shutdown: cancel background tasks, dispose connections
+    app.state.detector_task.cancel()
+    try:
+        await app.state.detector_task
+    except asyncio.CancelledError:
+        pass
     app.state.cleanup_task.cancel()
     try:
         await app.state.cleanup_task
@@ -122,6 +141,10 @@ app.include_router(servers_router, prefix="/api/v1/servers", tags=["servers"])
 from app.api.metrics import router as metrics_router
 
 app.include_router(metrics_router, prefix="/api/v1/metrics", tags=["metrics"])
+
+from app.api.ws import router as ws_router
+
+app.include_router(ws_router, prefix="/api/v1")
 #
 # from app.api.users import router as users_router
 # app.include_router(users_router, prefix="/api/v1/users", tags=["users"])
