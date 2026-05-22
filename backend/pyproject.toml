@@ -41,7 +41,7 @@ include = ["app*"]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-exclude = [".venv", ".venv-verify", "alembic/versions/"]
+exclude = [".venv", ".venv-verify", "alembic/versions/", "alembic/env.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
