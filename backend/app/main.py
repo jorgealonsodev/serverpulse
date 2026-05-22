@@ -1,10 +1,13 @@
 from contextlib import asynccontextmanager
+import asyncio
+from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import text as sa_text
+from sqlalchemy import delete, text as sa_text
 
 from app.database import async_session, engine
+from app.models.metric import Metric
 from app.redis_client import redis_client
 
 
@@ -31,9 +34,31 @@ async def lifespan(app: FastAPI):
     if not redis_ok:
         raise RuntimeError("Redis connection failed on startup")
 
+    # Spawn cleanup background task
+    async def _cleanup_old_metrics():
+        while True:
+            await asyncio.sleep(3600)
+            try:
+                async with async_session() as session:
+                    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+                    await session.execute(
+                        delete(Metric).where(Metric.received_at < cutoff)
+                    )
+                    await session.commit()
+            except Exception:
+                pass  # log in production
+
+    cleanup_task = asyncio.create_task(_cleanup_old_metrics())
+    app.state.cleanup_task = cleanup_task
+
     yield
 
-    # Shutdown: dispose connections
+    # Shutdown: cancel cleanup task, dispose connections
+    app.state.cleanup_task.cancel()
+    try:
+        await app.state.cleanup_task
+    except asyncio.CancelledError:
+        pass
     await engine.dispose()
     await redis_client.close()
 
@@ -93,9 +118,10 @@ app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 from app.api.servers import router as servers_router
 
 app.include_router(servers_router, prefix="/api/v1/servers", tags=["servers"])
-#
-# from app.api.metrics import router as metrics_router
-# app.include_router(metrics_router, prefix="/api/v1/metrics", tags=["metrics"])
+
+from app.api.metrics import router as metrics_router
+
+app.include_router(metrics_router, prefix="/api/v1/metrics", tags=["metrics"])
 #
 # from app.api.users import router as users_router
 # app.include_router(users_router, prefix="/api/v1/users", tags=["users"])
