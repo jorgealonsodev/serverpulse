@@ -1,4 +1,5 @@
 import os
+from contextlib import asynccontextmanager
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -39,51 +40,52 @@ async def clean_db(test_engine):
 
 
 @pytest.fixture
-async def client(test_engine):
-    """Async test client for FastAPI app with per-test DB session."""
+def client(test_engine):
+    """Factory that creates an AsyncClient in the test's event loop.
+
+    Usage:
+        async with client() as c:
+            resp = await c.get("/api/v1/...")
+    """
     test_session_factory = async_sessionmaker(
         test_engine,
         class_=AsyncSession,
         expire_on_commit=False,
     )
 
-    async def override_get_db():
-        async with test_session_factory() as session:
-            try:
-                yield session
-            finally:
-                await session.close()
+    @asynccontextmanager
+    async def _make_client():
+        async def override_get_db():
+            async with test_session_factory() as session:
+                try:
+                    yield session
+                finally:
+                    await session.close()
 
-    app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_db] = override_get_db
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            yield ac
+        app.dependency_overrides.clear()
 
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
-
-    app.dependency_overrides.clear()
+    return _make_client
 
 
 @pytest.fixture
 def ws_client_factory():
-    """Factory that creates a WebSocket-capable AsyncClient in the test's event loop."""
-    from httpx import AsyncClient
+    """Factory that creates a WebSocket-capable AsyncClient in the test's event loop.
+
+    Usage:
+        async with ws_client_factory() as ws_client:
+            async with aconnect_ws("/api/v1/ws?token=...", ws_client) as ws:
+                ...
+    """
     from httpx_ws.transport import ASGIWebSocketTransport
 
-    clients = []
-
-    def _create():
+    @asynccontextmanager
+    async def _make_ws_client():
         transport = ASGIWebSocketTransport(app=app)
-        ac = AsyncClient(transport=transport, base_url="http://test")
-        clients.append(ac)
-        return ac
+        async with AsyncClient(transport=transport, base_url="http://test") as ac:
+            yield ac
 
-    yield _create
-
-    # Cleanup all created clients
-    import asyncio
-
-    for ac in clients:
-        try:
-            asyncio.get_running_loop().create_task(ac.aclose())
-        except Exception:
-            pass
+    return _make_ws_client

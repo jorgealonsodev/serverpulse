@@ -12,16 +12,16 @@ from app.models.server import Server
 # ---------------------------------------------------------------------------
 
 
-async def register_user(client: AsyncClient, email: str, password: str = "secret123") -> dict:
+async def register_user(c: AsyncClient, email: str, password: str = "secret123") -> dict:
     """Register a user and return the response JSON."""
-    resp = await client.post("/api/v1/auth/register", json={"email": email, "password": password})
+    resp = await c.post("/api/v1/auth/register", json={"email": email, "password": password})
     assert resp.status_code == 201
     return resp.json()
 
 
-async def login_user(client: AsyncClient, email: str, password: str = "secret123") -> str:
+async def login_user(c: AsyncClient, email: str, password: str = "secret123") -> str:
     """Login and return the access_token."""
-    resp = await client.post(
+    resp = await c.post(
         "/api/v1/auth/login",
         json={"email": email, "password": password},
     )
@@ -29,23 +29,11 @@ async def login_user(client: AsyncClient, email: str, password: str = "secret123
     return resp.json()["access_token"]
 
 
-async def auth_headers(client: AsyncClient, email: str, password: str = "secret123") -> dict:
+async def auth_headers(c: AsyncClient, email: str, password: str = "secret123") -> dict:
     """Register + login and return Authorization headers."""
-    await register_user(client, email, password)
-    token = await login_user(client, email, password)
+    await register_user(c, email, password)
+    token = await login_user(c, email, password)
     return {"Authorization": f"Bearer {token}"}
-
-
-async def get_db_session(client: AsyncClient) -> AsyncSession:
-    """Extract the current DB session from the app's dependency overrides."""
-    override = client.app.dependency_overrides.get(get_db)
-    if override is None:
-        raise RuntimeError("get_db not overridden")
-    # The override is an async generator; we need to get the session from it.
-    # Instead, we'll use a different approach: get the session via the override's closure.
-    # Actually, let's just create a new session from the test engine.
-    # For simplicity, we'll pass the session through a fixture approach.
-    raise NotImplementedError("Use db_session fixture instead")
 
 
 # ---------------------------------------------------------------------------
@@ -89,204 +77,216 @@ def test_hash_agent_token_different_tokens():
 # ---------------------------------------------------------------------------
 
 
-async def test_create_server_success(client: AsyncClient):
+async def test_create_server_success(client):
     """POST /api/v1/servers/ — 201 with id, name, api_token."""
-    headers = await auth_headers(client, "create@test.com")
-    resp = await client.post("/api/v1/servers/", json={"name": "web-01"}, headers=headers)
-    assert resp.status_code == 201
-    data = resp.json()
-    assert data["name"] == "web-01"
-    assert data["hostname"] is None
-    assert "id" in data
-    assert "api_token" in data
-    assert len(data["api_token"]) > 0
+    async with client() as c:
+        headers = await auth_headers(c, "create@test.com")
+        resp = await c.post("/api/v1/servers/", json={"name": "web-01"}, headers=headers)
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["name"] == "web-01"
+        assert data["hostname"] is None
+        assert "id" in data
+        assert "api_token" in data
+        assert len(data["api_token"]) > 0
 
 
-async def test_create_server_with_hostname(client: AsyncClient):
+async def test_create_server_with_hostname(client):
     """POST /api/v1/servers — 201 includes hostname."""
-    headers = await auth_headers(client, "hostname@test.com")
-    resp = await client.post(
-        "/api/v1/servers/",
-        json={"name": "web-01", "hostname": "web01.example.com"},
-        headers=headers,
-    )
-    assert resp.status_code == 201
-    data = resp.json()
-    assert data["hostname"] == "web01.example.com"
+    async with client() as c:
+        headers = await auth_headers(c, "hostname@test.com")
+        resp = await c.post(
+            "/api/v1/servers/",
+            json={"name": "web-01", "hostname": "web01.example.com"},
+            headers=headers,
+        )
+        assert resp.status_code == 201
+        data = resp.json()
+        assert data["hostname"] == "web01.example.com"
 
 
-async def test_create_server_empty_name(client: AsyncClient):
+async def test_create_server_empty_name(client):
     """POST /api/v1/servers — 422 when name is empty."""
-    headers = await auth_headers(client, "emptyname@test.com")
-    resp = await client.post("/api/v1/servers/", json={"name": ""}, headers=headers)
-    assert resp.status_code == 422
+    async with client() as c:
+        headers = await auth_headers(c, "emptyname@test.com")
+        resp = await c.post("/api/v1/servers/", json={"name": ""}, headers=headers)
+        assert resp.status_code == 422
 
 
-async def test_list_servers(client: AsyncClient):
+async def test_list_servers(client):
     """GET /api/v1/servers — 200 with list of own servers."""
-    headers = await auth_headers(client, "list@test.com")
-    # Create two servers
-    await client.post("/api/v1/servers/", json={"name": "srv-1"}, headers=headers)
-    await client.post("/api/v1/servers/", json={"name": "srv-2"}, headers=headers)
+    async with client() as c:
+        headers = await auth_headers(c, "list@test.com")
+        # Create two servers
+        await c.post("/api/v1/servers/", json={"name": "srv-1"}, headers=headers)
+        await c.post("/api/v1/servers/", json={"name": "srv-2"}, headers=headers)
 
-    resp = await client.get("/api/v1/servers/", headers=headers)
-    assert resp.status_code == 200
-    data = resp.json()
-    assert len(data) == 2
-    names = {s["name"] for s in data}
-    assert names == {"srv-1", "srv-2"}
+        resp = await c.get("/api/v1/servers/", headers=headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 2
+        names = {s["name"] for s in data}
+        assert names == {"srv-1", "srv-2"}
 
 
-async def test_list_servers_user_isolation(client: AsyncClient):
+async def test_list_servers_user_isolation(client):
     """GET /api/v1/servers — user A cannot see user B's servers."""
-    # User A creates 2 servers
-    headers_a = await auth_headers(client, "user-a@test.com")
-    await client.post("/api/v1/servers/", json={"name": "a-srv-1"}, headers=headers_a)
-    await client.post("/api/v1/servers/", json={"name": "a-srv-2"}, headers=headers_a)
+    async with client() as c:
+        # User A creates 2 servers
+        headers_a = await auth_headers(c, "user-a@test.com")
+        await c.post("/api/v1/servers/", json={"name": "a-srv-1"}, headers=headers_a)
+        await c.post("/api/v1/servers/", json={"name": "a-srv-2"}, headers=headers_a)
 
-    # User B creates 1 server
-    headers_b = await auth_headers(client, "user-b@test.com")
-    await client.post("/api/v1/servers/", json={"name": "b-srv-1"}, headers=headers_b)
+        # User B creates 1 server
+        headers_b = await auth_headers(c, "user-b@test.com")
+        await c.post("/api/v1/servers/", json={"name": "b-srv-1"}, headers=headers_b)
 
-    # User A should only see their own servers
-    resp = await client.get("/api/v1/servers/", headers=headers_a)
-    assert resp.status_code == 200
-    data = resp.json()
-    assert len(data) == 2
-    for s in data:
-        assert s["name"].startswith("a-srv-")
+        # User A should only see their own servers
+        resp = await c.get("/api/v1/servers/", headers=headers_a)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert len(data) == 2
+        for s in data:
+            assert s["name"].startswith("a-srv-")
 
 
-async def test_get_server_detail(client: AsyncClient):
+async def test_get_server_detail(client):
     """GET /api/v1/servers/{id} — 200 with server detail, no api_token."""
-    headers = await auth_headers(client, "detail@test.com")
-    create_resp = await client.post(
-        "/api/v1/servers/",
-        json={"name": "detail-srv"},
-        headers=headers,
-    )
-    server_id = create_resp.json()["id"]
+    async with client() as c:
+        headers = await auth_headers(c, "detail@test.com")
+        create_resp = await c.post(
+            "/api/v1/servers/",
+            json={"name": "detail-srv"},
+            headers=headers,
+        )
+        server_id = create_resp.json()["id"]
 
-    resp = await client.get(f"/api/v1/servers/{server_id}", headers=headers)
-    assert resp.status_code == 200
-    data = resp.json()
-    assert data["name"] == "detail-srv"
-    assert "api_token" not in data
-    assert "id" in data
-    assert "status" in data
+        resp = await c.get(f"/api/v1/servers/{server_id}", headers=headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["name"] == "detail-srv"
+        assert "api_token" not in data
+        assert "id" in data
+        assert "status" in data
 
 
-async def test_get_server_other_user_404(client: AsyncClient):
+async def test_get_server_other_user_404(client):
     """GET /api/v1/servers/{id} — 404 for other user's server."""
-    # User A creates a server
-    headers_a = await auth_headers(client, "owner@test.com")
-    create_resp = await client.post(
-        "/api/v1/servers/",
-        json={"name": "owner-srv"},
-        headers=headers_a,
-    )
-    server_id = create_resp.json()["id"]
+    async with client() as c:
+        # User A creates a server
+        headers_a = await auth_headers(c, "owner@test.com")
+        create_resp = await c.post(
+            "/api/v1/servers/",
+            json={"name": "owner-srv"},
+            headers=headers_a,
+        )
+        server_id = create_resp.json()["id"]
 
-    # User B tries to access it
-    headers_b = await auth_headers(client, "other@test.com")
-    resp = await client.get(f"/api/v1/servers/{server_id}", headers=headers_b)
-    assert resp.status_code == 404
+        # User B tries to access it
+        headers_b = await auth_headers(c, "other@test.com")
+        resp = await c.get(f"/api/v1/servers/{server_id}", headers=headers_b)
+        assert resp.status_code == 404
 
 
-async def test_delete_server(client: AsyncClient):
+async def test_delete_server(client):
     """DELETE /api/v1/servers/{id} — 204, server gone."""
-    headers = await auth_headers(client, "delete@test.com")
-    create_resp = await client.post("/api/v1/servers/", json={"name": "del-srv"}, headers=headers)
-    server_id = create_resp.json()["id"]
+    async with client() as c:
+        headers = await auth_headers(c, "delete@test.com")
+        create_resp = await c.post("/api/v1/servers/", json={"name": "del-srv"}, headers=headers)
+        server_id = create_resp.json()["id"]
 
-    resp = await client.delete(f"/api/v1/servers/{server_id}", headers=headers)
-    assert resp.status_code == 204
+        resp = await c.delete(f"/api/v1/servers/{server_id}", headers=headers)
+        assert resp.status_code == 204
 
-    # Verify it's gone
-    resp = await client.get(f"/api/v1/servers/{server_id}", headers=headers)
-    assert resp.status_code == 404
+        # Verify it's gone
+        resp = await c.get(f"/api/v1/servers/{server_id}", headers=headers)
+        assert resp.status_code == 404
 
 
-async def test_delete_server_other_user_404(client: AsyncClient):
+async def test_delete_server_other_user_404(client):
     """DELETE /api/v1/servers/{id} — 404 for other user's server, server still exists."""
-    # User A creates a server
-    headers_a = await auth_headers(client, "del-owner@test.com")
-    create_resp = await client.post(
-        "/api/v1/servers/",
-        json={"name": "del-owner-srv"},
-        headers=headers_a,
-    )
-    server_id = create_resp.json()["id"]
+    async with client() as c:
+        # User A creates a server
+        headers_a = await auth_headers(c, "del-owner@test.com")
+        create_resp = await c.post(
+            "/api/v1/servers/",
+            json={"name": "del-owner-srv"},
+            headers=headers_a,
+        )
+        server_id = create_resp.json()["id"]
 
-    # User B tries to delete it
-    headers_b = await auth_headers(client, "del-other@test.com")
-    resp = await client.delete(f"/api/v1/servers/{server_id}", headers=headers_b)
-    assert resp.status_code == 404
+        # User B tries to delete it
+        headers_b = await auth_headers(c, "del-other@test.com")
+        resp = await c.delete(f"/api/v1/servers/{server_id}", headers=headers_b)
+        assert resp.status_code == 404
 
-    # User A can still access it
-    resp = await client.get(f"/api/v1/servers/{server_id}", headers=headers_a)
-    assert resp.status_code == 200
+        # User A can still access it
+        resp = await c.get(f"/api/v1/servers/{server_id}", headers=headers_a)
+        assert resp.status_code == 200
 
 
-async def test_regenerate_token(client: AsyncClient):
+async def test_regenerate_token(client):
     """POST /api/v1/servers/{id}/regenerate-token — 200 with new api_token."""
-    headers = await auth_headers(client, "regen@test.com")
-    create_resp = await client.post("/api/v1/servers/", json={"name": "regen-srv"}, headers=headers)
-    server_id = create_resp.json()["id"]
-    old_token = create_resp.json()["api_token"]
+    async with client() as c:
+        headers = await auth_headers(c, "regen@test.com")
+        create_resp = await c.post("/api/v1/servers/", json={"name": "regen-srv"}, headers=headers)
+        server_id = create_resp.json()["id"]
+        old_token = create_resp.json()["api_token"]
 
-    resp = await client.post(
-        f"/api/v1/servers/{server_id}/regenerate-token",
-        headers=headers,
-    )
-    assert resp.status_code == 200
-    data = resp.json()
-    assert "api_token" in data
-    assert data["api_token"] != old_token
+        resp = await c.post(
+            f"/api/v1/servers/{server_id}/regenerate-token",
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "api_token" in data
+        assert data["api_token"] != old_token
 
 
-async def test_regenerate_token_invalidates_old(client: AsyncClient, test_engine):
+async def test_regenerate_token_invalidates_old(client, test_engine):
     """Regenerating a token replaces the hash in DB; old token no longer matches."""
-    headers = await auth_headers(client, "regen-old@test.com")
-    create_resp = await client.post(
-        "/api/v1/servers/",
-        json={"name": "regen-old-srv"},
-        headers=headers,
-    )
-    server_id = create_resp.json()["id"]
-    old_token = create_resp.json()["api_token"]
-    old_hash = hash_agent_token(old_token)
+    async with client() as c:
+        headers = await auth_headers(c, "regen-old@test.com")
+        create_resp = await c.post(
+            "/api/v1/servers/",
+            json={"name": "regen-old-srv"},
+            headers=headers,
+        )
+        server_id = create_resp.json()["id"]
+        old_token = create_resp.json()["api_token"]
+        old_hash = hash_agent_token(old_token)
 
-    # Regenerate
-    await client.post(
-        f"/api/v1/servers/{server_id}/regenerate-token",
-        headers=headers,
-    )
+        # Regenerate
+        await c.post(
+            f"/api/v1/servers/{server_id}/regenerate-token",
+            headers=headers,
+        )
 
-    # Get the server from DB and check hash changed
-    async with test_engine.connect() as conn:
-        from sqlalchemy import select as sa_select
+        # Get the server from DB and check hash changed
+        async with test_engine.connect() as conn:
+            from sqlalchemy import select as sa_select
 
-        result = await conn.execute(sa_select(Server.api_token_hash).where(Server.id == server_id))
-        new_hash = result.scalar_one()
-        assert new_hash != old_hash
+            result = await conn.execute(sa_select(Server.api_token_hash).where(Server.id == server_id))
+            new_hash = result.scalar_one()
+            assert new_hash != old_hash
 
 
-async def test_regenerate_token_other_user_404(client: AsyncClient):
+async def test_regenerate_token_other_user_404(client):
     """POST /api/v1/servers/{id}/regenerate-token — 404 for other user's server."""
-    # User A creates a server
-    headers_a = await auth_headers(client, "regen-owner@test.com")
-    create_resp = await client.post(
-        "/api/v1/servers/",
-        json={"name": "regen-owner-srv"},
-        headers=headers_a,
-    )
-    server_id = create_resp.json()["id"]
+    async with client() as c:
+        # User A creates a server
+        headers_a = await auth_headers(c, "regen-owner@test.com")
+        create_resp = await c.post(
+            "/api/v1/servers/",
+            json={"name": "regen-owner-srv"},
+            headers=headers_a,
+        )
+        server_id = create_resp.json()["id"]
 
-    # User B tries to regenerate
-    headers_b = await auth_headers(client, "regen-other@test.com")
-    resp = await client.post(
-        f"/api/v1/servers/{server_id}/regenerate-token",
-        headers=headers_b,
-    )
-    assert resp.status_code == 404
+        # User B tries to regenerate
+        headers_b = await auth_headers(c, "regen-other@test.com")
+        resp = await c.post(
+            f"/api/v1/servers/{server_id}/regenerate-token",
+            headers=headers_b,
+        )
+        assert resp.status_code == 404
