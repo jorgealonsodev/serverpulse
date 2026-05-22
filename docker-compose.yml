@@ -42,14 +42,29 @@ services:
       JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-1440}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
       AGENT_TOKEN_SALT: ${AGENT_TOKEN_SALT:-serverpulse-agent-salt}
-    ports:
-      - "8000:8000"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
       timeout: 5s
       retries: 3
       start_period: 15s
+    networks:
+      - serverpulse_net
+
+  frontend:
+    build: ./frontend
+    networks:
+      - serverpulse_net
+
+  nginx:
+    build: ./nginx
+    ports:
+      - "80:80"
+    depends_on:
+      frontend:
+        condition: service_started
+      backend:
+        condition: service_healthy
     networks:
       - serverpulse_net
 
