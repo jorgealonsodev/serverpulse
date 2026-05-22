@@ -1,0 +1,83 @@
+# Archive Report: fase-6-agent
+
+## Change Summary
+
+**Change**: fase-6-agent
+**Description**: Standalone Python agent that collects system metrics via psutil and POSTs to the backend API, with systemd integration and one-liner installer.
+**Archive Date**: 2026-05-22
+**SDD Cycle**: Complete ✓
+
+## Artifact Traceability (Engram)
+
+| Artifact | Observation ID | Type | Status |
+|----------|---------------|------|--------|
+| Proposal | #3487 | architecture | ✅ Archived |
+| Spec | #3488 | architecture | ✅ Archived |
+| Design | #3489 | architecture | ✅ Archived |
+| Tasks | #3490 | architecture | ✅ Archived |
+| Apply Progress | #3491 | architecture | ✅ Archived |
+| Archive Report | *(this)* | architecture | ✅ Created |
+
+## Specs
+
+### Agent Metrics Collector
+
+| Requirement | ID | Status | Verification |
+|------------|----|--------|-------------|
+| Configuration Loading | FS6-REQ-01 | ✅ Implemented | INI parsed from /etc/serverpulse/agent.conf |
+| Metrics Collection | FS6-REQ-02 | ✅ Implemented | psutil every 15s, full field set |
+| Metrics Ingestion POST | FS6-REQ-03 | ✅ Implemented | POST /api/v1/metrics/ingest with X-Agent-Token |
+| Retry w/ Exponential Backoff | FS6-REQ-04 | ✅ Implemented | 1s→300s max, non-blocking |
+| Clean SIGTERM Shutdown | FS6-REQ-05 | ✅ Implemented | exit 0, verified PASS |
+
+### Agent Systemd Integration
+
+| Requirement | ID | Status | Verification |
+|------------|----|--------|-------------|
+| Systemd Unit File | FS6-REQ-06 | ✅ Implemented | serverpulse-agent.service |
+| One-Liner Installer | FS6-REQ-07 | ✅ Implemented | install.sh with --url/--token/--dry-run |
+| End-to-End Verification | FS6-REQ-08 | ✅ Implemented | Agent → Backend → DB → Queryable |
+
+## Tasks Completed
+
+| Phase | Tasks | Status |
+|-------|-------|--------|
+| 1. Dependencies | requirements.txt | ✅ |
+| 2. Core Agent | serverpulse-agent.py (127 lines) | ✅ |
+| 3. Systemd Integration | serverpulse-agent.service | ✅ |
+| 4. Installer | install.sh with --dry-run | ✅ |
+| 5. Documentation | README.md | ✅ |
+| 6. Manual Verification | 4 metrics collected, SIGTERM PASS, retry PASS | ✅ |
+| 7. Commit + Push | 09f379b pushed to origin/main | ✅ |
+
+**Total**: 7 phases, 0 incomplete
+
+## Files Changed
+
+| File | Action | Description |
+|------|--------|-------------|
+| `agent/requirements.txt` | Created | psutil>=5.9.0, requests>=2.31.0 |
+| `agent/serverpulse-agent.py` | Created | Main agent script (127 lines) |
+| `agent/serverpulse-agent.service` | Created | systemd unit file |
+| `agent/install.sh` | Created | Installer with --url/--token/--dry-run |
+| `agent/README.md` | Created | Full documentation |
+| `backend/pyproject.toml` | Modified | Added email-validator (pre-existing bug fix) |
+| `.gitignore` | Modified | Added sdd/ to ignore list |
+
+**New**: 5 files | **Modified**: 2 files
+
+## Deviations / Side Fixes
+
+- Fixed pre-existing bug: added `email-validator` to `backend/pyproject.toml` (caused backend crash on startup due to missing dependency chain)
+
+## Verification Evidence
+
+- Agent collected 4 metric samples (CPU 2.2-3.9%, RAM 29.8-30.3%, Disk 76.8%, Load avg ~0.5/0.5/0.8)
+- All metrics stored in PostgreSQL, queryable via GET /api/v1/servers/{id}/metrics
+- SIGTERM → "Agent stopped." → exit code 0
+- Server status → "online" with last_seen_at timestamp updated
+- Retry backoff recovery tested after connection interruption
+
+## Archive Verdict
+
+All 8 requirements from spec implemented and verified. All 7 task phases complete. Commit 09f379b pushed. No critical issues. Archive approved.

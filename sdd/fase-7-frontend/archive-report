@@ -1,0 +1,59 @@
+# Archive Report: fase-7-frontend
+
+**Archived**: 2026-05-22
+**Status**: Success — fully implemented, verified, and merged.
+
+## Artifact Lineage (Engram Observation IDs)
+
+| Artifact | Engram ID | Topic Key |
+|----------|-----------|-----------|
+| Proposal | #3494 | `sdd/fase-7-frontend/proposal` |
+| Spec | #3495 | `sdd/fase-7-frontend/spec` |
+| Design | #3496 | `sdd/fase-7-frontend/design` |
+| Tasks | #3497 | `sdd/fase-7-frontend/tasks` |
+| Apply Progress | #3498 | `sdd/fase-7-frontend/apply-progress` |
+
+No separate `verify-report` was persisted — verification results are embedded in the apply-progress artifact (#3498).
+
+## Implementation Summary
+
+**36 new files, 2 modified** across 4 stacked PRs (stacked-to-main strategy):
+
+| PR | Commits | Scope | Key Files |
+|----|---------|-------|-----------|
+| PR 1 | da4c8ec | Scaffold + Types + API + Stores | `frontend/package.json`, `vite.config.ts`, `tsconfig.json`, `tailwind.config.js`, `src/types/index.ts`, `src/api/*.ts`, `src/stores/*.ts` |
+| PR 2 | 5aadbf3 | Reusable UI Components | `src/components/{Layout,StatusDot,Sparkline,MetricChart,TimeRangeSelector,ConfirmModal,CopyButton}.tsx` |
+| PR 3 | e2938ac | Pages + Hooks | `src/pages/{Login,Register,Dashboard,ServerNew,ServerDetail}Page.tsx`, `src/hooks/{useAuth,useLiveMetrics}.ts` |
+| PR 4 | 0635a96 | Backend Fixes + Tests | `backend/app/main.py` (WS mount + CORS), `Makefile`, `src/tests/*.test.tsx`, `vitest.config.ts` |
+
+## Verification Results
+
+- **TypeScript**: `tsc --noEmit` — 0 errors
+- **Tests**: `npm test` — 2/2 pass (LoginPage smoke, DashboardPage smoke)
+- **Dependencies**: `npm install` — all resolved
+
+## Deviations from Design
+
+| Design | Actual | Reason |
+|--------|--------|--------|
+| `api/metrics.ts` separate file | Merged into `api/servers.ts` as `queryMetrics()` | Fewer files, same functionality |
+| WS router prefix in mount | Mounted without prefix (router defines `/ws` internally) | Existing router structure |
+
+## Issues Discovered During Implementation
+
+- `useAuth.ts` needed `.tsx` extension (contains JSX for AuthGuard component)
+- `@/` path alias needed explicit resolution in `vitest.config.ts`
+- ResizeObserver mock required in test setup for Recharts `ResponsiveContainer`
+
+## Filesystem Artifacts
+
+All artifacts preserved at `sdd/fase-7-frontend/`:
+- `proposal.md`
+- `spec.md`
+- `design.md`
+- `tasks/` (directory with task breakdown)
+- `archive-report` (this file)
+
+## SDD Cycle Complete
+
+The change was fully planned, implemented (4 stacked PRs), verified (0 TS errors, 2/2 tests passing), and archived.

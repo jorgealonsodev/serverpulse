@@ -1,0 +1,63 @@
+# Tasks: fase-6-agent
+
+## Review Workload Forecast
+
+| Field | Value |
+|-------|-------|
+| Estimated changed lines | ~440 (5 new files) |
+| 400-line budget risk | Medium |
+| Chained PRs recommended | No |
+| Suggested split | Single PR |
+| Delivery strategy | ask-on-risk |
+| Chain strategy | pending |
+
+Decision needed before apply: Yes
+Chained PRs recommended: No
+Chain strategy: pending
+400-line budget risk: Medium
+
+### Implementation Order
+1. `requirements.txt` — dependencies declared first
+2. `serverpulse-agent.py` — core agent logic (largest, most critical)
+3. `serverpulse-agent.service` — systemd unit
+4. `install.sh` — installer
+5. `README.md` — documentation
+6. Manual verification against docker backend
+7. Commit + push
+
+---
+
+## Phase 1: Dependencies
+
+- [ ] 1.1 Create `agent/requirements.txt` with `psutil>=5.9.0` and `requests>=2.31.0` (pinned major.minor)
+
+## Phase 2: Core Agent
+
+- [ ] 2.1 Create `agent/serverpulse-agent.py` with: `load_config()` reading `/etc/serverpulse/agent.conf` (INI), `collect_metrics()` via psutil (cpu, ram, disk, net, uptime, load_avg, recorded_at), `send_metrics()` POST to `{api_url}/api/v1/metrics/ingest` with `X-Agent-Token` header, retry loop with exponential backoff (1s → 2s → 4s → max 300s), SIGTERM/SIGINT signal handler for clean shutdown, main loop collecting every 15s
+- [ ] 2.2 Ensure payload dict matches `MetricIngest` schema: cpu_percent, ram_percent, ram_used_mb, ram_total_mb, disk_percent, disk_used_gb, disk_total_gb, net_rx_bytes, net_tx_bytes, uptime_seconds, load_avg_1/5/15, recorded_at
+
+## Phase 3: Systemd Integration
+
+- [ ] 3.1 Create `agent/serverpulse-agent.service`: User=serverpulse, Restart=always, RestartSec=5, After=network-online.target, ExecStart pointing to Python script with python3
+
+## Phase 4: Installer
+
+- [ ] 4.1 Create `agent/install.sh`: accept `--url` and `--token` args (or prompt), create `serverpulse` user if not exists, install pip deps, copy script/service to /opt/serverpulse-agent, write `/etc/serverpulse/agent.conf`, run `systemctl daemon-reload`, enable and start service
+- [ ] 4.2 Add `--dry-run` flag for config validation without service changes
+
+## Phase 5: Documentation
+
+- [ ] 5.1 Create `agent/README.md`: overview, requirements (Python 3.8+), installation steps, configuration via `/etc/serverpulse/agent.conf`, verification commands (`systemctl status`, `journalctl`), troubleshooting (check network, token validity), uninstall steps
+
+## Phase 6: Manual Verification
+
+- [ ] 6.1 Start docker backend, create server + agent token via API
+- [ ] 6.2 Run `python3 serverpulse-agent.py` locally against docker backend — verify 202 Accepted responses
+- [ ] 6.3 Test SIGTERM: send signal, verify clean exit code 0 after current cycle completes
+- [ ] 6.4 Test retry: stop backend, verify backoff logging, restart backend, verify recovery
+
+## Phase 7: Commit + Push
+
+- [ ] 7.1 `git add agent/`
+- [ ] 7.2 Commit with conventional message: `feat(agent): add standalone metrics collector with systemd service`
+- [ ] 7.3 Push to remote

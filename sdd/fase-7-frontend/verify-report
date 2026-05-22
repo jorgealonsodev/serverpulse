@@ -1,0 +1,129 @@
+## Verification Report — fase-7-frontend
+
+**Change**: f58339fe — Frontend Dashboard SPA
+**Mode**: Standard (Strict TDD NOT APPLICABLE — Frontend smoke tests only, per PRD §13)
+**Verdict**: ❌ **FAIL**
+
+---
+
+### Completeness
+
+| Phase | Tasks | Done | Missed | Status |
+|-------|-------|------|--------|--------|
+| 1: Scaffold (PR 1) | 12 | 12 | 0 | ✅ Complete |
+| 2: API Client + Stores (PR 1) | 7 | 7 | 0 | ✅ Complete |
+| 3: Components (PR 2) | 7 | 7 | 0 | ✅ Complete |
+| 4: Pages + Hooks (PR 3) | 7 | 7 | 0 | ✅ Complete |
+| 5: Backend Fixes (PR 4) | 2 | 1 | 1 | ⚠️ Missing WS prefix |
+| 6: Tests + Makefile (PR 4) | 5 | 5 | 0 | ✅ Complete |
+| 7: Verification | 5 | — | — | — (this phase) |
+
+---
+
+### Build / Type-Check
+
+| Command | Status | Detail |
+|---------|--------|--------|
+| `npm install` | ✅ **PASS** | Up to date, audited 301 packages |
+| `npx tsc --noEmit` | ❌ **FAIL** | 1 error in `src/tests/setup.ts:14:3`: TS2741 — `DOMRect` mock missing `fromRect` |
+
+---
+
+### Tests
+
+| Command | Status | Files | Tests | Detail |
+|---------|--------|-------|-------|--------|
+| `npx vitest run` | ✅ **PASS** | 2/2 | 2/2 | LoginPage + DashboardPage smoke tests pass |
+
+---
+
+### Spec Compliance Matrix
+
+| Req ID | Scenario | Coverage | Status |
+|--------|----------|----------|--------|
+| FS7-REQ-01 | Dev server with proxy | Vite config line 8: proxy `/api` → `localhost:8000` | ✅ **PASS** |
+| FS7-REQ-02 | Authenticated request includes JWT | `api/client.ts:23`: reads `sp_token` from localStorage, injects `Authorization: Bearer <token>` | ✅ **PASS** |
+| FS7-REQ-02 | Unauthenticated request redirects | `api/client.ts:36-40`: on 401, clears token, redirects to `/login` | ✅ **PASS** |
+| FS7-REQ-03 | Successful login | `LoginPage.tsx:36-40`: `POST /api/v1/auth/login`, stores JWT via `useAuthStore().login()`, navigates to `from` path | ✅ **PASS** |
+| FS7-REQ-03 | Invalid credentials | `LoginPage.tsx:41-43`: catches error, sets `error` state, renders red banner | ✅ **PASS** |
+| FS7-REQ-04 | Successful registration | `RegisterPage.tsx:37-38`: `POST /api/v1/auth/register`, `navigate('/login')` | ✅ **PASS** |
+| FS7-REQ-04 | Duplicate email | `RegisterPage.tsx:39-41`: catches error, sets `error` state, renders red banner | ✅ **PASS** |
+| FS7-REQ-05 | Renders server cards | `DashboardPage.tsx:90-143`: grid with name, hostname, StatusDot, sparklines, uptime, relative time | ✅ **PASS** |
+| FS7-REQ-05 | Responsive layout | `DashboardPage.tsx:90`: `grid-cols-1 md:grid-cols-2 lg:grid-cols-3` | ✅ **PASS** |
+| FS7-REQ-06 | Server created with token | `ServerNewPage.tsx:33, 40-87`: on 201, shows `api_token` with CopyButton + install snippet | ✅ **PASS** |
+| FS7-REQ-07 | Metrics with time range | `ServerDetailPage.tsx:15-60, 149-179`: 4 MetricCharts, TimeRangeSelector, re-fetches on range change | ✅ **PASS** |
+| FS7-REQ-07 | Delete with confirmation | `ServerDetailPage.tsx:72-80, 181-188`: ConfirmModal → `DELETE /api/v1/servers/:id` → `navigate('/')` | ✅ **PASS** |
+| FS7-REQ-08 | Real-time update | `useLiveMetrics.ts:34-79`: WS connect, `onmessage` parses metric/status_change, updates store | ❌ **FAIL** — WS won't connect (see CRIT issue CRIT-01) |
+| FS7-REQ-08 | Polling fallback | `useLiveMetrics.ts:52-57`: `onclose` starts `setInterval(pollAll, 15000)` | ✅ **PASS** |
+| FS7-REQ-09 | Auth persistence across refresh | `authStore.ts:25-30`: `hydrate()` reads `sp_token` from localStorage; called on module load line 34 | ✅ **PASS** |
+| FS7-REQ-10 | Consistent dark palette | `tailwind.config.js:9-16`: dark tokens; `index.css:5-12`: CSS vars; all pages use `bg-bg`, `bg-card`, `text-gray-*` | ✅ **PASS** |
+| FS7-REQ-11 | Login smoke test | `LoginPage.test.tsx`: renders email + password inputs + sign in button → **test passes** | ✅ **PASS** |
+| FS7-REQ-11 | Dashboard smoke test | `DashboardPage.test.tsx`: mocks serversApi.list, renders server cards → **test passes** | ✅ **PASS** |
+
+---
+
+### Design Coherence
+
+| Decision | Expected | Actual | Status |
+|----------|----------|--------|--------|
+| Fetch wrapper (no axios) | `api/client.ts` with JWT interceptor | ✅ `api/client.ts` — generic `api<T>()` fetch wrapper | **MATCH** |
+| Zustand over Context/Redux | 3 stores: auth, servers, ui | ✅ `authStore.ts`, `serversStore.ts`, `uiStore.ts` | **MATCH** |
+| localStorage for JWT | `authStore.hydrate()` on init | ✅ Reads `sp_token` on module load | **MATCH** |
+| WS + polling fallback | `useLiveMetrics()` with 15s poll | ✅ WS connect → onclose → setInterval 15s | **MATCH** |
+| TailwindCSS tokens | Dark Grafana palette | ✅ `#0e1116`, `#1a1c23`, `#3b82f6`, `#22c55e`, `#ef4444` | **MATCH** |
+| Vite proxy `/api` → `:8000` | `vite.config.ts` proxy config | ✅ Line 8: proxy `/api` → `http://localhost:8000` | **MATCH** |
+| CORS middleware | `CORSMiddleware` in main.py | ✅ `main.py:75-83` — added, reads from `settings.CORS_ORIGINS` | **MATCH** |
+| WS router mounted | `include_router(ws_router, prefix="/api/v1")` | ❌ `main.py:141` — includes WITHOUT prefix, route is at `/ws` instead of `/api/v1/ws` | **MISMATCH** |
+
+---
+
+### Issues
+
+#### CRITICAL
+
+| ID | Severity | Description |
+|----|----------|-------------|
+| **CRIT-01** | **CRITICAL** | **WS router mounted at wrong prefix**. `main.py:141` reads `app.include_router(ws_router, tags=["ws"])` — missing `prefix="/api/v1"`. Frontend connects to `/api/v1/ws` (line 39 of `useLiveMetrics.ts`), but backend serves WS at `/ws`. The WS connection will fail, realtime updates won't work (polling fallback is the only working path). **Fix**: change line 141 to `app.include_router(ws_router, prefix="/api/v1", tags=["ws"])`. |
+| **CRIT-02** | **CRITICAL** | **TypeScript compilation fails**. `src/tests/setup.ts:14:3` — `TS2741: Property 'fromRect' is missing in type 'typeof DOMRect'`. The mock class declared at line 14 lacks the `fromRect` static method from the `DOMRect` DOM type (available in TS 5.7+ with `lib: ["DOM"]`). Frontend build (`tsc -b`) will fail. **Fix**: add `static fromRect() { return new DOMRect() }` inside the mock class. |
+
+#### WARNING
+
+| ID | Severity | Description |
+|----|----------|-------------|
+| WARN-01 | WARNING | **CORS_ORIGINS defaults to empty string**. `config.py:16` sets `CORS_ORIGINS: str = ""`, so the middleware is added but with empty origins. Vite proxy avoids this in dev, but anyone connecting from a different port without proxy will hit CORS blocks. Acknowledged in design as deferred to Fase 8 (nginx). |
+| WARN-02 | WARNING | **Login password validation uses min(1)**. `LoginPage.tsx:12`: `z.string().min(1, 'Password is required')`. Register uses `min(8)`. Login intentionally allows any non-empty password since it's just authentication — the backend handles password rejection. Not a bug, just a UX inconsistency. |
+
+---
+
+### Commits
+
+| # | Hash | Message | Pushed? |
+|---|------|---------|---------|
+| 1 | `da4c8ec` | `feat(frontend): scaffold + types + API client + Zustand stores` | ✅ (main up-to-date with origin/main) |
+| 2 | `5aadbf3` | `feat(frontend): reusable UI components` | ✅ |
+| 3 | `e2938ac` | `feat(frontend): pages + hooks for full dashboard SPA` | ✅ |
+| 4 | `0635a96` | `fix(backend): mount WS router, add CORS middleware + frontend tests` | ✅ |
+
+All 4 commits are on `main` and pushed to `origin/main`. ✓
+
+---
+
+### Backend Fixes Verification
+
+| Fix | Expected | Actual | Status |
+|-----|----------|--------|--------|
+| WS router import | `from app.api.ws import router as ws_router` | ✅ `main.py:139` | **OK** |
+| WS router mounted with prefix `/api/v1` | `app.include_router(ws_router, prefix="/api/v1", tags=["ws"])` | ❌ `main.py:141`: prefix missing | **CRIT-01** |
+| CORS middleware import | `from fastapi.middleware.cors import CORSMiddleware` | ✅ `main.py:6` | **OK** |
+| CORS middleware added | `app.add_middleware(CORSMiddleware, ...)` | ✅ `main.py:77-83` | **OK** |
+
+---
+
+## Verdict: ❌ FAIL
+
+Two critical issues prevent full spec compliance:
+
+1. **CRIT-01**: WS router mounted at `/ws` instead of `/api/v1/ws` — breaks FS7-REQ-08 real-time update scenario.
+2. **CRIT-02**: TypeScript compilation fails with TS2741 in test setup — breaks the `tsc --noEmit` and `tsc -b` build path.
+
+Both are trivial one-line fixes. The rest of the implementation (scaffold, API client, stores, components, pages, hooks, dark theme, responsive layout, smoke tests) is fully aligned with the spec and design decisions.

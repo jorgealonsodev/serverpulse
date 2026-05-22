@@ -1,0 +1,133 @@
+# Spec: fase-6-agent
+
+## Agent Metrics Collector
+
+### Requirement: Configuration Loading (FS6-REQ-01)
+
+The agent MUST read configuration from `/etc/serverpulse/agent.conf` (INI format) containing `api_url` and `api_token`. The agent SHALL exit with a non-zero code and error message if the file is missing or required keys are absent.
+
+#### Scenario: Valid config file present
+
+- GIVEN `/etc/serverpulse/agent.conf` exists with valid `api_url` and `api_token`
+- WHEN the agent starts
+- THEN it reads both values and begins the collection loop
+
+#### Scenario: Config file missing
+
+- GIVEN `/etc/serverpulse/agent.conf` does not exist
+- WHEN the agent starts
+- THEN it exits with code 1 and logs an error message indicating missing config
+
+#### Scenario: Config file present but missing required key
+
+- GIVEN the config file exists but lacks `api_token`
+- WHEN the agent starts
+- THEN it exits with code 1 and logs an error message indicating missing key
+
+### Requirement: Metrics Collection (FS6-REQ-02)
+
+The agent MUST collect metrics every 15 seconds using `psutil`. Collected fields: `cpu_percent`, `ram_percent`, `ram_used_mb`, `ram_total_mb`, `disk_percent`, `disk_used_gb`, `disk_total_gb`, `net_rx_bytes`, `net_tx_bytes`, `uptime_seconds`, `load_avg_1`, `load_avg_5`, `load_avg_15`, and `recorded_at` (ISO 8601 UTC).
+
+#### Scenario: Successful collection cycle
+
+- GIVEN the agent is running
+- WHEN a 15-second interval elapses
+- THEN it collects all metric fields via `psutil` and constructs a JSON body
+
+#### Scenario: Disk metrics target root partition
+
+- GIVEN the agent is running on a Linux system
+- WHEN `disk_percent` and `disk_used_gb` are collected
+- THEN they correspond to the root partition (`/`)
+
+### Requirement: Metrics Ingestion POST (FS6-REQ-03)
+
+The agent MUST POST the collected metrics as JSON to `{api_url}/api/v1/metrics/ingest` with the `X-Agent-Token: {api_token}` header. The body MUST match the `MetricIngest` schema: `cpu_percent`, `ram_percent`, `ram_used_mb`, `ram_total_mb`, `disk_percent`, `disk_used_gb`, `disk_total_gb`, `net_rx_bytes`, `net_tx_bytes`, `uptime_seconds`, `load_avg_1`, `load_avg_5`, `load_avg_15`, `recorded_at`.
+
+#### Scenario: Successful POST
+
+- GIVEN collected metrics and valid config
+- WHEN the agent POSTs to the ingest endpoint
+- THEN it receives HTTP 202 and logs success
+
+#### Scenario: Auth failure
+
+- GIVEN an invalid or expired `api_token`
+- WHEN the agent POSTs to the ingest endpoint
+- THEN it receives HTTP 401 and triggers retry logic
+
+### Requirement: Retry with Exponential Backoff (FS6-REQ-04)
+
+On any request failure (network error or non-2xx response), the agent MUST retry with exponential backoff: 1s → 2s → 4s → ... → max 300s. The agent MUST NOT skip collection cycles during retry — new metrics continue to be collected and POSTed alongside retries.
+
+#### Scenario: Transient failure recovers
+
+- GIVEN the backend is temporarily unreachable
+- WHEN the agent receives a connection error
+- THEN it retries after 1s, then 2s on next failure, doubling each time up to 300s max
+
+#### Scenario: Collection continues during retry
+
+- GIVEN a POST fails and retry is pending
+- WHEN the next 15-second collection cycle completes
+- THEN the new metrics are POSTed; the retry counter resets on success
+
+### Requirement: Clean SIGTERM Shutdown (FS6-REQ-05)
+
+The agent MUST handle `SIGTERM` by setting a shutdown flag, finishing the current collection/POST cycle, and exiting cleanly with code 0.
+
+#### Scenario: SIGTERM during idle wait
+
+- GIVEN the agent is between collection cycles
+- WHEN `SIGTERM` is received
+- THEN the agent exits immediately with code 0
+
+#### Scenario: SIGTERM during POST
+
+- GIVEN the agent is sending a POST request
+- WHEN `SIGTERM` is received
+- THEN the agent finishes the current POST, then exits with code 0
+
+## Agent Systemd Integration
+
+### Requirement: Systemd Unit File (FS6-REQ-06)
+
+The unit file at `/etc/systemd/system/serverpulse-agent.service` MUST configure: `User=serverpulse`, `Restart=always`, `RestartSec=5`, `After=network-online.target`, and capture stdout to journald.
+
+#### Scenario: Service starts after boot
+
+- GIVEN the service is enabled
+- WHEN the system boots and network is online
+- THEN the agent starts automatically
+
+#### Scenario: Service restarts on crash
+
+- GIVEN the agent process exits unexpectedly
+- WHEN systemd detects the exit
+- THEN it restarts the agent after 5 seconds
+
+### Requirement: One-Liner Installer (FS6-REQ-07)
+
+`install.sh` MUST create the `serverpulse` system user, install `psutil` and `requests` via pip, download the agent script and service file, prompt for or accept via `--url` and `--token` flags the `api_url` and `api_token`, write `/etc/serverpulse/agent.conf`, and enable the service.
+
+#### Scenario: Unattended install with flags
+
+- GIVEN a clean Ubuntu 24.04 system with Python 3.8+
+- WHEN `curl -fsSL .../install.sh | sudo bash -s -- --url https://api.example.com --token abc123` is executed
+- THEN the user is created, config written, service enabled, and agent starts
+
+#### Scenario: Interactive install without flags
+
+- GIVEN a clean Ubuntu 24.04 system
+- WHEN `install.sh` is run without flags
+- THEN it prompts for `api_url` and `api_token`, writes config, and enables the service
+
+### Requirement: End-to-End Verification (FS6-REQ-08)
+
+The agent MUST be runnable locally such that metrics appear in the backend database and are queryable via the API.
+
+#### Scenario: Metrics arrive at backend after local run
+
+- GIVEN the backend is running and a server is registered
+- WHEN the agent runs locally with valid config
+- THEN metrics appear in the database and are returned by `GET /api/v1/servers/{id}/metrics`

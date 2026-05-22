@@ -1,0 +1,70 @@
+# Archive Report: fase-5-websocket
+
+## Change Summary
+
+WebSocket realtime updates for the ServerPulse dashboard. Added a WS endpoint with JWT auth, connection manager, Redis pub/sub forwarding, and offline detection background task.
+
+## Observation IDs (Engram Traceability)
+
+| Artifact | Observation ID | Topic Key |
+|----------|---------------|-----------|
+| Proposal | #3480 | sdd/fase-5-websocket/proposal |
+| Spec | #3481 | sdd/fase-5-websocket/spec |
+| Design | #3482 | sdd/fase-5-websocket/design |
+| Tasks | #3483 | sdd/fase-5-websocket/tasks |
+| Apply Progress | #3484 | sdd/fase-5-websocket/apply-progress |
+| Archive Report | #3485 | sdd/fase-5-websocket/archive-report |
+
+## Verification Results
+
+Verification was done inline during the apply phase (tasks 6.1-6.2):
+- **pytest tests/test_ws.py**: 4 passed (teardown errors from httpx-ws/anyio are known library issues)
+- **Full regression**: 20 tests passed
+- **TDD**: Strict — all tests written RED before implementation
+
+## Files Changed
+
+| File | Action | Description |
+|------|--------|-------------|
+| `backend/app/ws/__init__.py` | Created | Module init exporting ConnectionManager |
+| `backend/app/ws/manager.py` | Created | ConnectionManager with dict[UUID, list[WebSocket]] tracking |
+| `backend/app/api/ws.py` | Created | WS endpoint: JWT auth via query param, Redis pub/sub, metric wrapping |
+| `backend/app/core/alerts.py` | Created | OfflineDetector with in-memory alerted set, 30s polling |
+| `backend/tests/test_ws.py` | Created | 4 integration tests covering all FS5 requirements |
+| `backend/app/main.py` | Modified | Added WS router include, offline detector task in lifespan |
+| `backend/tests/conftest.py` | Modified | Added ws_client fixture with ASGIWebSocketTransport |
+| `docker-compose.yml` | Modified | Added Redis port mapping (6379:6379) for test accessibility |
+
+**Result**: 5 new files, 3 modified files.
+
+## Requirements Coverage
+
+| Requirement | Status |
+|-------------|--------|
+| FS5-REQ-01 — WS Connection with JWT Auth | ✅ |
+| FS5-REQ-02 — Initial Subscription and Status | ✅ |
+| FS5-REQ-03 — Metric Message Forwarding | ✅ |
+| FS5-REQ-04 — Status Change Forwarding | ✅ |
+| FS5-REQ-05 — Connection Lifecycle | ✅ |
+| FS5-REQ-06 — Offline Detection | ✅ |
+| FS5-REQ-07 — Test Coverage | ✅ |
+| FS5-REQ-08 — WS Router Registration | ✅ |
+
+## Commit
+
+- **SHA**: baf420d
+- **Message**: `feat(ws): add WebSocket realtime updates (fase-5-websocket)`
+- **Pushed**: Yes (origin/main)
+
+## Known Issues
+
+- httpx-ws/anyio teardown errors ("Attempted to exit cancel scope in a different task") — known library issue, does not affect test results
+## Deviations from Design
+
+- Metric messages wrapped with `{"type": "metric", "server_id": ..., "data": ...}` — design didn't specify wrapping, tests required it
+- Used `_get_ws_session()` context manager for testability
+- Conftest uses global `async_session` to avoid event loop conflicts with WS connections
+
+## SDD Cycle Status
+
+✅ Complete — all phases (proposal → spec → design → tasks → apply → archive) finished.

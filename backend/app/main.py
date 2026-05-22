@@ -138,7 +138,7 @@ app.include_router(metrics_router, prefix="/api/v1/metrics", tags=["metrics"])
 
 from app.api.ws import router as ws_router
 
-app.include_router(ws_router, tags=["ws"])
+app.include_router(ws_router, prefix="/api/v1", tags=["ws"])
 #
 # from app.api.users import router as users_router
 # app.include_router(users_router, prefix="/api/v1/users", tags=["users"])

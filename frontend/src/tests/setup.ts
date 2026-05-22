@@ -20,6 +20,12 @@ if (!global.DOMRect) {
     right = 100
     bottom = 100
     left = 0
+    static fromRect(_other?: DOMRectInit): DOMRect {
+      return new DOMRect()
+    }
+    toJSON() {
+      return { x: this.x, y: this.y, width: this.width, height: this.height, top: this.top, right: this.right, bottom: this.bottom, left: this.left }
+    }
     constructor(x = 0, y = 0, width = 100, height = 100) {
       this.x = x
       this.y = y

@@ -1,0 +1,160 @@
+# Design: Fase 6 — Agent
+
+## Technical Approach
+
+Single-file Python script (`agent/serverpulse-agent.py`) collects system metrics every 15s via `psutil`, POSTs JSON matching the `MetricIngest` schema to `POST /api/v1/metrics/ingest` with `X-Agent-Token` header, retries failures with exponential backoff (max 5min), and exits cleanly on SIGTERM. Deployed via systemd unit + install.sh installer. No packaging — script + service + config only.
+
+## Architecture Decisions
+
+| Decision | Choice | Rejected | Rationale |
+|----------|--------|----------|-----------|
+| Script structure | Single file | Multi-module package | PRD says standalone script; no complex dependency graph justifies packages |
+| Config format | INI (configparser) | JSON, YAML, env vars | INI is native Python, trivial to parse, maps to systemd-oriented ops workflow |
+| Auth mechanism | `X-Agent-Token` header | Bearer token, API key param | Backend `get_server_from_agent_token` dependency expects `X-Agent-Token`; matches existing contract |
+| Retry strategy | Exponential backoff, max 300s | Circuit breaker, queue | PRD scope: simple retry. No buffering — acceptable data loss per risk table |
+| Deployment | systemd unit + install.sh | deb/rpm, Docker | PRD targets Ubuntu 24.04; install.sh sufficient. Packaging out of scope |
+| Collection interval | Hardcoded 15s | Configurable via INI | Matches PRD spec; avoids config complexity for v1 |
+| Python version | 3.8+ | 3.12+ only | Broad compatibility; psutil supports 3.8+ |
+| Service restart delay | RestartSec=10 | RestartSec=5 (spec) | Spec says 5s but agent has 1s blocking cpu_percent call; 10s avoids rapid restart storms |
+
+## Data Flow
+
+```
+psutil collectors
+       │
+       ▼
+ collect_metrics() ──→ dict matching MetricIngest
+       │
+       ▼
+ send_metrics() ──→ POST /api/v1/metrics/ingest
+       │                    │
+       │              X-Agent-Token: {api_token}
+       │              Content-Type: application/json
+       │                    │
+       │              ┌─────┴──────┐
+       │              │  202 OK 🟢  │
+       │              │  4xx/5xx 🔴  │──→ retry w/ backoff
+       │              │  timeout 🔴  │──→ retry w/ backoff
+       │              └─────────────┘
+       │
+  ┌────┴────┐
+  │ SIGTERM │──→ shutdown flag → finish cycle → exit 0
+  └─────────┘
+```
+
+Config reads from `/etc/serverpulse/agent.conf`:
+```ini
+[serverpulse]
+api_url = https://api.example.com
+api_token = abc123...
+```
+
+## File Changes
+
+| File | Action | Description |
+|------|--------|-------------|
+| `agent/serverpulse-agent.py` | Create | Main agent: main(), load_config(), collect_metrics(), send_metrics(), signal handler |
+| `agent/serverpulse-agent.service` | Create | systemd unit: User=serverpulse, Restart=always, RestartSec=10 |
+| `agent/install.sh` | Create | Installer: creates user, installs deps, writes config, enables service |
+| `agent/requirements.txt` | Create | psutil, requests (pinned) |
+| `agent/README.md` | Create | Usage, configuration, troubleshooting |
+
+## Interfaces / Contracts
+
+### Agent → Backend (HTTP POST)
+
+```python
+# Matches backend MetricIngest schema exactly
+payload = {
+    "cpu_percent": float,        # 0-100
+    "ram_percent": float,        # 0-100
+    "ram_used_mb": int,           # >=0
+    "ram_total_mb": int,          # >=0
+    "disk_percent": float,        # 0-100
+    "disk_used_gb": float,        # >=0
+    "disk_total_gb": float,       # >=0
+    "net_rx_bytes": int,          # >=0
+    "net_tx_bytes": int,          # >=0
+    "uptime_seconds": int,        # >=0
+    "load_avg_1": float | None,   # optional
+    "load_avg_5": float | None,   # optional
+    "load_avg_15": float | None,  # optional
+    "recorded_at": str | None,    # ISO 8601 UTC or null
+}
+```
+
+Headers: `X-Agent-Token: {api_token}`, `Content-Type: application/json`
+Endpoint: `POST {api_url}/api/v1/metrics/ingest` → 202 Accepted
+
+### Metric Collection (psutil)
+
+```python
+cpu_percent = psutil.cpu_percent(interval=1)      # blocking 1s sample
+ram = psutil.virtual_memory()                      # percent, used, total
+disk = psutil.disk_usage('/')                       # percent, used, total
+net = psutil.net_io_counters()                     # bytes_recv, bytes_sent
+uptime = int(time.time() - psutil.boot_time())     # seconds since boot
+load = os.getloadavg()                              # (1m, 5m, 15m) on Linux
+```
+
+### Retry Logic
+
+```python
+MAX_BACKOFF = 300  # 5 minutes
+backoff = 1
+while True:
+    try:
+        r = requests.post(url, headers=headers, json=data, timeout=10)
+        if r.status_code < 500:
+            backoff = 1  # reset on success or client error
+            break
+        # 5xx → retry
+    except requests.RequestException:
+        pass  # timeout, connection error → retry
+    time.sleep(min(backoff, MAX_BACKOFF))
+    backoff *= 2
+```
+
+### Signal Handling
+
+```python
+shutdown = False
+
+def handle_signal(signum, frame):
+    global shutdown
+    shutdown = True
+
+signal.signal(signal.SIGTERM, handle_signal)
+signal.signal(signal.SIGINT, handle_signal)
+
+# Main loop checks shutdown between cycles
+while not shutdown:
+    collect_and_send()
+    time.sleep(COLLECT_INTERVAL)
+```
+
+## Testing Strategy
+
+| Layer | What to Test | Approach |
+|-------|-------------|----------|
+| Unit | Metric collection, payload shape | Mock psutil, verify dict matches MetricIngest fields |
+| Unit | Retry backoff logic | Mock requests failing N times, verify sleep pattern |
+| Unit | Signal handling | Send SIGTERM, verify clean exit after current cycle |
+| Unit | Config loading | Write temp INI, verify load_config parses correctly |
+| Integration | End-to-end flow | Start docker backend, create server+token, run agent, verify metrics via GET endpoint |
+| Integration | systemd lifecycle | install.sh on Ubuntu 24.04, verify start/stop/restart/status |
+
+**Note**: Automated unit tests out of scope for v1 per proposal. Manual integration verification is the primary QA method.
+
+## Migration / Rollout
+
+No migration required — this is a new standalone component. Deployment:
+1. Run `install.sh --url <api_url> --token <agent_token>` on target server
+2. Verify: `systemctl status serverpulse-agent`
+3. Verify: `journalctl -u serverpulse-agent -f` shows POST 202 responses
+4. Rollback: stop service, remove files, delete user (see proposal rollback plan)
+
+## Open Questions
+
+- [ ] Should `COLLECT_INTERVAL` be configurable via INI for future flexibility? Currently hardcoded at 15s.
+- [ ] Should agent log metric collection errors at WARN level or only on retry exhaustion?

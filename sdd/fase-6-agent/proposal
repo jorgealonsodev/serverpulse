@@ -1,0 +1,86 @@
+# Proposal: Fase 6 — Agent
+
+## Intent
+
+Build the standalone Python agent that collects system metrics via `psutil` and POSTs them to the backend ingest endpoint (`POST /api/v1/metrics/ingest`). This is the data source for the entire monitoring system — without it, the dashboard has nothing to display.
+
+## Scope
+
+### In Scope
+- `agent/serverpulse-agent.py` — single executable Python script (psutil + requests only)
+- `agent/serverpulse-agent.service` — systemd unit file
+- `agent/install.sh` — one-liner installer for Ubuntu 24.04
+- `agent/requirements.txt` — pinned dependencies
+- Local verification: run agent pointing to docker backend, confirm metrics arrive + WS publish
+
+### Out of Scope
+- Agent packaging (deb/rpm) — install.sh is sufficient for PRD
+- Multi-platform support — Linux only (systemd dependency)
+- Agent self-update mechanism
+- Metrics buffering/queueing beyond simple retry
+
+## Capabilities
+
+### New Capabilities
+- `agent-metrics-collector`: standalone Python script that collects system metrics via psutil, POSTs to backend ingest endpoint with X-Agent-Token auth, handles retry with exponential backoff, and shuts down cleanly on SIGTERM
+- `agent-systemd-integration`: systemd unit file and install.sh script for deployment on Ubuntu 24.04
+
+### Modified Capabilities
+- None
+
+## Approach
+
+**Agent script** (`serverpulse-agent.py`):
+1. Parse `/etc/serverpulse/agent.conf` (INI) for `api_url` and `api_token`
+2. Collect metrics every 15s: `psutil.cpu_percent()`, `psutil.virtual_memory()`, `psutil.disk_usage("/")`, `psutil.net_io_counters()`, `psutil.getloadavg()`, `psutil.boot_time()`
+3. POST JSON body matching `MetricIngest` schema to `{api_url}/api/v1/metrics/ingest` with `X-Agent-Token: {api_token}` header
+4. Retry on failure: exponential backoff 1s → 2s → 4s → ... → max 300s, without losing the 15s collection cycle
+5. SIGTERM handler sets shutdown flag, finishes current cycle, exits cleanly
+6. All logging to stdout (systemd journal)
+
+**systemd unit** (`serverpulse-agent.service`):
+- `User=serverpulse`, `Restart=always`, `RestartSec=5`, stdout captured by journald
+
+**Installer** (`install.sh`):
+- Accepts `--url` and `--token` CLI args (or prompts interactively)
+- Creates `serverpulse` system user, installs Python deps via pip, writes config, enables service
+
+## Affected Areas
+
+| Area | Impact | Description |
+|------|--------|-------------|
+| `agent/serverpulse-agent.py` | New | Main agent script |
+| `agent/serverpulse-agent.service` | New | systemd unit file |
+| `agent/install.sh` | New | One-liner installer |
+| `agent/requirements.txt` | New | Pinned deps (psutil, requests) |
+
+## Risks
+
+| Risk | Likelihood | Mitigation |
+|------|------------|------------|
+| psutil API differences across Python versions | Low | Pin psutil version, test on Python 3.8+ |
+| systemd not available (non-systemd distros) | Low | PRD targets Ubuntu 24.04 only |
+| Install.sh runs as root, potential security | Medium | Validate inputs, create dedicated user, minimal permissions |
+| Network partition causes metric loss | Low | Retry with backoff up to 5min; after that, skip (acceptable per PRD) |
+
+## Rollback Plan
+
+1. `sudo systemctl stop serverpulse-agent && sudo systemctl disable serverpulse-agent`
+2. `sudo rm /etc/systemd/system/serverpulse-agent.service && sudo systemctl daemon-reload`
+3. `sudo rm -rf /opt/serverpulse-agent /etc/serverpulse`
+4. `sudo userdel serverpulse` (if no other services use it)
+
+## Dependencies
+
+- Phases 0-5 complete (backend ingest endpoint, auth by agent token, WS pub/sub)
+- Python 3.8+ on target machine
+- `psutil` and `requests` packages
+
+## Success Criteria
+
+- [ ] Agent script runs standalone, collects metrics every 15s
+- [ ] Metrics arrive at backend ingest endpoint (verified via logs + DB query)
+- [ ] Metrics published via WebSocket (verified via wscat)
+- [ ] install.sh completes successfully on clean Ubuntu 24.04
+- [ ] systemd service starts, restarts on crash, stops cleanly on SIGTERM
+- [ ] Retry logic works: simulated backend downtime → backoff → recovery
