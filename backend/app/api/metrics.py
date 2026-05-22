@@ -1,7 +1,6 @@
-from datetime import datetime, timedelta, timezone
-from uuid import UUID
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, status
 
 from app.api.deps import get_server_from_agent_token
 from app.database import get_db
@@ -18,7 +17,7 @@ async def ingest_metrics(
     server: Server = Depends(get_server_from_agent_token),
     db=Depends(get_db),
 ) -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     metric = Metric(
         server_id=server.id,
         cpu_percent=data.cpu_percent,
@@ -46,8 +45,9 @@ async def ingest_metrics(
 
     # Publish to Redis (fire-and-forget)
     try:
-        from app import redis_client
         import json
+
+        from app import redis_client
 
         metric_data = MetricResponse.model_validate(metric).model_dump(mode="json")
         await redis_client.redis_client.publish(

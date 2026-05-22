@@ -1,8 +1,9 @@
 import asyncio
+import contextlib
 import json
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from sqlalchemy import select
@@ -71,7 +72,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str | None = None) -> 
         await pubsub.subscribe(*channels)
 
     # --- Send initial status for each server ---
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     threshold = timedelta(minutes=2)
     for server in servers:
         is_online = server.last_seen_at is not None and (now - server.last_seen_at) < threshold
@@ -126,10 +127,8 @@ async def websocket_endpoint(websocket: WebSocket, token: str | None = None) -> 
         pass
     finally:
         listener_task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await listener_task
-        except asyncio.CancelledError:
-            pass
         if channels:
             await pubsub.unsubscribe(*channels)
             await pubsub.aclose()

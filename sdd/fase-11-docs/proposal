@@ -1,0 +1,78 @@
+# Proposal: Fase 11 — Docs y pulido
+
+## Intent
+
+Fases 0-10 están completas. El proyecto tiene código funcional, CI/CD, monitoreo, pero la documentación está incompleta: README con TODOs pendientes, docs/architecture.md y docs/api.md no existen, docs/deployment.md no existe. Esta fase cierra el proyecto con documentación profesional que permita a cualquier persona desplegar y entender ServerPulse sin ayuda del autor.
+
+## Scope
+
+### In Scope
+- Completar README.md (secciones 1-9 per PRD §14): screenshot placeholder → real, stack con versiones reales, decisiones técnicas justificadas, roadmap actualizado
+- `docs/architecture.md` — diagrama Mermaid + explicación de cada capa
+- `docs/api.md` — referencia completa de todos los endpoints (auth, servers, metrics, ws, health)
+- `docs/deployment.md` — guía paso a paso VPS (PRD §12): Ubuntu setup, ufw, fail2ban, Docker, certbot, compose, backups
+- Verificar que `make lint` y `make test` pasan en el proyecto completo
+- Commit: `docs: complete documentation and screenshots`
+
+### Out of Scope
+- Cambios funcionales en backend, frontend, agente o infraestructura
+- Nuevos endpoints o features
+- Refactor de código existente
+- Configuración de CI/CD o monitoreo
+
+## Capabilities
+
+### New Capabilities
+- `documentation`: README completo, architecture.md, api.md, deployment.md con contenido real basado en el código implementado en fases 0-10
+
+### Modified Capabilities
+- None
+
+## Approach
+
+1. **README.md**: Rellenar secciones con TODOs — versiones reales del stack (leer pyproject.toml, package.json), decisiones técnicas con justificación real (5+ decisiones), roadmap actualizado con fases completadas marcadas
+2. **docs/architecture.md**: Diagrama Mermaid mostrando flujo: Agente → Nginx → Backend → PostgreSQL/Redis → WebSocket → Frontend. Explicación de cada componente y sus responsabilidades
+3. **docs/api.md**: Documentar cada endpoint leyendo los routers reales (`auth.py`, `servers.py`, `metrics.py`, `ws.py`, `main.py`). Incluir método, path, auth, request/response schema, códigos de estado
+4. **docs/deployment.md**: Guía paso a paso desde VPS limpio hasta stack funcionando, basada en PRD §12. Incluir secrets necesarios (referenciar docs/secrets.md existente)
+5. **Makefile**: Verificar targets completos per PRD §16, ajustar si es necesario
+6. **Verificación**: Ejecutar `make lint` y `make test` para confirmar que todo pasa
+
+## Affected Areas
+
+| Area | Impact | Description |
+|------|--------|-------------|
+| `README.md` | Modified | Completar secciones 1-9 con contenido real |
+| `docs/architecture.md` | New | Diagrama Mermaid + explicación de arquitectura |
+| `docs/api.md` | New | Referencia completa de endpoints |
+| `docs/deployment.md` | New | Guía de despliegue en VPS paso a paso |
+| `Makefile` | Modified | Verificar/ajustar targets si es necesario |
+
+## Risks
+
+| Risk | Likelihood | Mitigation |
+|------|------------|------------|
+| Documentación desalineada con código real | Low | Leer código fuente actual para cada endpoint y componente |
+| `make lint` o `make test` fallan | Medium | Si fallan, documentar el problema pero NO fixear código (out of scope) — solo reportar |
+| Proposal excede 450 palabras | Low | Usar tablas y bullets, evitar prosa extensa |
+
+## Rollback Plan
+
+1. `git revert` del commit `docs: complete documentation and screenshots`
+2. No hay cambios en código funcional, base de datos, ni configuración de infraestructura
+3. Los archivos de docs nuevos se eliminan con el revert
+
+## Dependencies
+
+- Fases 0-10 completas (código funcional)
+- `docs/secrets.md` ya existe (referenciar en deployment.md)
+- PRD.md como fuente de verdad para requisitos de documentación
+
+## Success Criteria
+
+- [ ] README.md sin TODOs, con las 9 secciones del PRD §14 completas
+- [ ] `docs/architecture.md` existe con diagrama Mermaid y explicación
+- [ ] `docs/api.md` existe con todos los endpoints documentados
+- [ ] `docs/deployment.md` existe con guía VPS paso a paso
+- [ ] `make lint` pasa sin errores
+- [ ] `make test` pasa sin errores
+- [ ] Commit único con mensaje `docs: complete documentation and screenshots`

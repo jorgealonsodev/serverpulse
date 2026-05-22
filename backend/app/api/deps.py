@@ -18,8 +18,10 @@ async def get_current_user(
     try:
         payload = decode_token(token)
         user_id = payload["sub"]
-    except Exception:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    except Exception as err:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
+        ) from err
 
     user = await db.get(User, user_id)
     if not user:

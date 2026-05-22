@@ -1,0 +1,139 @@
+# Design: Nginx + Producción
+
+## Technical Approach
+
+Deploy ServerPulse as a single-entry production stack. Nginx reverse-proxy on port 80 is the sole external gateway: it serves frontend static assets (built via multi-stage Docker) and proxies `/api/*` + WebSocket to the backend. Backend port 8000 is removed from external exposure — only reachable via Docker's internal `serverpulse_net`. The frontend API client uses relative paths (empty `VITE_API_BASE_URL`), so requests naturally route through nginx with no CORS needed in production.
+
+## Architecture Decisions
+
+| Decision | Options | Choice | Rationale |
+|----------|---------|--------|-----------|
+| Frontend serving | Vite dev server / nginx multi-stage | **nginx multi-stage** | Produces optimized static assets; nginx:alpine ≈ 25MB; rehearses real prod |
+| Reverse proxy | Caddy / Traefik / nginx | **nginx** | Already used for frontend serving; single tool; team familiarity; lightweight |
+| WebSocket handling | Separate port / path-based proxy | **Path-based `/api/v1/ws`** | Frontend already constructs `ws(s)://{host}/api/v1/ws?token=...`; no client changes needed |
+| Backend exposure | Keep 8000 public / internal only | **Internal only** | Removes attack surface; nginx is sole entry; dev uses compose override for direct access |
+
+## Data Flow
+
+```
+Browser ──:80──→ nginx ──┬── /api/v1/ws ──→ backend:8000 (WebSocket upgrade)
+                          ├── /api/*     ──→ backend:8000 (HTTP proxy)
+                          ├── /health    ──→ backend:8000 (HTTP proxy)
+                          └── /*         ──→ frontend:80  (static SPA, try_files → index.html)
+
+Internal: backend ──→ postgres:5432
+Internal: backend ──→ redis:6379
+```
+
+## File Changes
+
+| File | Action | Description |
+|------|--------|-------------|
+| `frontend/Dockerfile` | Create | Multi-stage build: `node:20-alpine` builder → `nginx:alpine` serving `/app/dist` |
+| `frontend/nginx-frontend.conf` | Create | SPA server block: `try_files $uri $uri/ /index.html`; gzip for JS/CSS/HTML/SVG |
+| `nginx/Dockerfile` | Create | `nginx:alpine` + custom `nginx.conf` |
+| `nginx/nginx.conf` | Create | Reverse proxy: `/api/*` → backend:8000, `/api/v1/ws` with WebSocket upgrade, `/health` → backend, `/` → frontend:80, security headers |
+| `docker-compose.yml` | Modify | Add `frontend` + `nginx` services; remove backend `ports: "8000:8000"`; add `depends_on` with health conditions |
+
+## Interfaces / Contracts
+
+### nginx/nginx.conf — key location blocks
+
+```nginx
+# API proxy (all /api/ routes)
+location /api/ {
+    proxy_pass http://backend:8000;
+    proxy_set_header Host              $host;
+    proxy_set_header X-Real-IP         $remote_addr;
+    proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+
+# WebSocket (must come before /api/ catch-all)
+location /api/v1/ws {
+    proxy_pass          http://backend:8000;
+    proxy_http_version  1.1;
+    proxy_set_header    Upgrade    $http_upgrade;
+    proxy_set_header    Connection "upgrade";
+    proxy_set_header    Host       $host;
+}
+
+# Health check (no auth needed)
+location /health {
+    proxy_pass http://backend:8000;
+}
+
+# Frontend static SPA
+location / {
+    proxy_pass http://frontend:80;
+}
+```
+
+### frontend/nginx-frontend.conf — SPA fallback
+
+```nginx
+server {
+    listen 80;
+    root /usr/share/nginx/html;
+    index index.html;
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+    # Cache static assets
+    location ~* \.(js|css|svg|png|ico)$ {
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+    }
+}
+```
+
+### docker-compose.yml — additions
+
+```yaml
+frontend:
+    build: ./frontend
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - serverpulse_net
+
+  nginx:
+    build: ./nginx
+    ports:
+      - "80:80"
+    depends_on:
+      frontend:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    networks:
+      - serverpulse_net
+```
+
+Backend service: **remove** `ports: - "8000:8000"` (internal-only via nginx).
+
+### CORS in production
+
+Backend `CORS_ORIGINS` env var should be set to the production origin (e.g., `http://localhost` or the domain). In nginx, same-origin requests to `/api/*` are proxied — no CORS needed if frontend and API share the same origin. Keep `CORS_ORIGINS` for dev override flexibility.
+
+## Testing Strategy
+
+| Layer | What | Approach |
+|-------|------|----------|
+| Unit | Frontend Dockerfile produces `/dist` | `docker build` succeeds, `ls /app/dist` in builder stage |
+| Integration | nginx routes correctly | `curl http://localhost/api/v1/auth/login` → 422 (FastAPI validation) |
+| Integration | SPA fallback works | `curl http://localhost/servers/new` → 200 with HTML body |
+| Integration | WebSocket upgrades | `wscat -c ws://localhost/api/v1/ws?token=...` → connects |
+| Integration | Security headers present | `curl -I http://localhost/` includes `X-Frame-Options: DENY` |
+| Integration | Health check | `curl http://localhost/health` → 200 with `{"status":"ok"}` |
+
+## Migration / Rollout
+
+No data migration required. Rollback: revert `docker-compose.yml`, restore backend `ports: "8000:8000"`, remove `frontend/Dockerfile`, `nginx/` dir. Run `docker compose down && docker compose up -d`.
+
+## Open Questions
+
+- [ ] None — all decisions resolved from proposal and codebase analysis

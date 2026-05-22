@@ -1,24 +1,24 @@
 """WebSocket integration tests — strict TDD (RED phase first)."""
 
 import asyncio
-import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
 from httpx_ws import aconnect_ws
 
-from app.core.security import create_access_token, generate_agent_token, hash_agent_token
+from app.core.security import hash_agent_token
 from app.database import async_session
 from app.main import app
 from app.models.server import Server
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-async def _register_and_login(client: AsyncClient, email: str = "ws@test.com", password: str = "secret123") -> str:
+async def _register_and_login(
+    client: AsyncClient, email: str = "ws@test.com", password: str = "secret123"
+) -> str:
     """Register a user, login, and return the JWT access token."""
     await client.post("/api/v1/auth/register", json={"email": email, "password": password})
     resp = await client.post("/api/v1/auth/login", json={"email": email, "password": password})
@@ -33,7 +33,7 @@ async def _create_server_for_user(user_id, name: str = "test-server"):
             user_id=user_id,
             name=name,
             api_token_hash=hash_agent_token("test-agent-token"),
-            last_seen_at=datetime.now(timezone.utc),
+            last_seen_at=datetime.now(UTC),
         )
         session.add(server)
         await session.commit()
@@ -48,23 +48,23 @@ async def _create_server_for_user(user_id, name: str = "test-server"):
 async def test_ws_connect_valid_token(client: AsyncClient, ws_client: AsyncClient):
     """Connect with valid JWT → accepted."""
     token = await _register_and_login(client)
-    async with aconnect_ws(f"/api/v1/ws?token={token}", ws_client) as ws:
+    async with aconnect_ws(f"/api/v1/ws?token={token}", ws_client) as _ws:
         # Connection accepted — we can receive messages
         pass
 
 
 async def test_ws_connect_invalid_token(ws_client: AsyncClient):
     """Connect with invalid token → closed with code 4001."""
-    with pytest.raises(Exception):
-        async with aconnect_ws("/api/v1/ws?token=invalid.token.here", ws_client) as ws:
-            await ws.receive()
+    with pytest.raises(Exception):  # noqa: B017
+        async with aconnect_ws("/api/v1/ws?token=invalid.token.here", ws_client) as _ws:
+            await _ws.receive()
 
 
 async def test_ws_connect_missing_token(ws_client: AsyncClient):
     """No token → closed with code 4001."""
-    with pytest.raises(Exception):
-        async with aconnect_ws("/api/v1/ws", ws_client) as ws:
-            await ws.receive()
+    with pytest.raises(Exception):  # noqa: B017
+        async with aconnect_ws("/api/v1/ws", ws_client) as _ws:
+            await _ws.receive()
 
 
 # ---------------------------------------------------------------------------
@@ -74,6 +74,7 @@ async def test_ws_connect_missing_token(ws_client: AsyncClient):
 async def test_ws_initial_status_on_connect(client: AsyncClient, ws_client: AsyncClient):
     """Connect WS → receive initial status_change for each server."""
     from jose import jwt
+
     from app.config import settings
 
     token = await _register_and_login(client)
@@ -98,6 +99,7 @@ async def test_ws_initial_status_on_connect(client: AsyncClient, ws_client: Asyn
 async def test_ws_receive_metric_on_ingest(client: AsyncClient, ws_client: AsyncClient):
     """Connect WS → POST ingest → receive metric message."""
     from jose import jwt
+
     from app.config import settings
 
     token = await _register_and_login(client)
@@ -111,7 +113,7 @@ async def test_ws_receive_metric_on_ingest(client: AsyncClient, ws_client: Async
         try:
             while True:
                 msg = await asyncio.wait_for(ws.receive_json(), timeout=1.0)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             pass
 
         # Ingest a metric via HTTP
@@ -150,6 +152,7 @@ async def test_ws_receive_metric_on_ingest(client: AsyncClient, ws_client: Async
 async def test_ws_status_change_offline(client: AsyncClient, ws_client: AsyncClient):
     """Set last_seen_at old → receive offline status_change."""
     from jose import jwt
+
     from app.config import settings
 
     token = await _register_and_login(client)
@@ -162,7 +165,7 @@ async def test_ws_status_change_offline(client: AsyncClient, ws_client: AsyncCli
             user_id=user_id,
             name="offline-server",
             api_token_hash="dummy-hash",
-            last_seen_at=datetime.now(timezone.utc) - timedelta(minutes=10),
+            last_seen_at=datetime.now(UTC) - timedelta(minutes=10),
         )
         session.add(server)
         await session.commit()
@@ -183,10 +186,11 @@ async def test_ws_status_change_offline(client: AsyncClient, ws_client: AsyncCli
 
 async def test_ws_multiple_connections(client: AsyncClient, ws_client: AsyncClient):
     """2 connections for same user → both receive metric."""
-    from jose import jwt
-    from app.config import settings
-    from httpx_ws.transport import ASGIWebSocketTransport
     from httpx import AsyncClient as HTTPXAsyncClient
+    from httpx_ws.transport import ASGIWebSocketTransport
+    from jose import jwt
+
+    from app.config import settings
     from app.ws.manager import manager
 
     token = await _register_and_login(client)
@@ -199,10 +203,12 @@ async def test_ws_multiple_connections(client: AsyncClient, ws_client: AsyncClie
     transport1 = ASGIWebSocketTransport(app=app)
     transport2 = ASGIWebSocketTransport(app=app)
 
-    async with HTTPXAsyncClient(transport=transport1, base_url="http://test") as ws1_client:
-        async with HTTPXAsyncClient(transport=transport2, base_url="http://test") as ws2_client:
-            async with aconnect_ws(f"/api/v1/ws?token={token}", ws1_client) as ws1:
-                async with aconnect_ws(f"/api/v1/ws?token={token}", ws2_client) as ws2:
+    async with (  # noqa: SIM117
+        HTTPXAsyncClient(transport=transport1, base_url="http://test") as ws1_client,
+        HTTPXAsyncClient(transport=transport2, base_url="http://test") as ws2_client,
+    ):
+        async with aconnect_ws(f"/api/v1/ws?token={token}", ws1_client) as ws1:
+            async with aconnect_ws(f"/api/v1/ws?token={token}", ws2_client) as ws2:
                     # Verify both connections are tracked
                     from uuid import UUID
                     uid = UUID(user_id)
@@ -213,8 +219,8 @@ async def test_ws_multiple_connections(client: AsyncClient, ws_client: AsyncClie
                     for ws in [ws1, ws2]:
                         try:
                             while True:
-                                msg = await asyncio.wait_for(ws.receive_json(), timeout=1.0)
-                        except asyncio.TimeoutError:
+                                _msg = await asyncio.wait_for(ws.receive_json(), timeout=1.0)  # noqa: F841
+                        except TimeoutError:
                             pass
 
                     # Ingest a metric

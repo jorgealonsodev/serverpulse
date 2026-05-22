@@ -30,7 +30,3 @@ services:
 volumes:
   prometheus_data:
   grafana_data:
-
-networks:
-  serverpulse_net:
-    external: true

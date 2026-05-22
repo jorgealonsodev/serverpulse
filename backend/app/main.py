@@ -1,12 +1,14 @@
-from contextlib import asynccontextmanager
 import asyncio
-from datetime import datetime, timedelta, timezone
+import contextlib
+from contextlib import asynccontextmanager
+from datetime import UTC, datetime, timedelta
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
-from sqlalchemy import delete, text as sa_text
+from sqlalchemy import delete
+from sqlalchemy import text as sa_text
 
 from app.config import settings
 from app.database import async_session, engine
@@ -43,7 +45,7 @@ async def lifespan(app: FastAPI):
             await asyncio.sleep(3600)
             try:
                 async with async_session() as session:
-                    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+                    cutoff = datetime.now(UTC) - timedelta(hours=24)
                     await session.execute(
                         delete(Metric).where(Metric.received_at < cutoff)
                     )
@@ -61,10 +63,8 @@ async def lifespan(app: FastAPI):
 
     # Shutdown: cancel cleanup task, dispose connections
     app.state.cleanup_task.cancel()
-    try:
+    with contextlib.suppress(asyncio.CancelledError):
         await app.state.cleanup_task
-    except asyncio.CancelledError:
-        pass
     await engine.dispose()
     await redis_client.close()
 

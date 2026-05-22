@@ -1,0 +1,98 @@
+# Archive Report: fase-8-nginx-prod
+
+**Archived**: 2026-05-22
+**Verdict**: PASS WITH WARNINGS
+**Commit**: 7470cab (`feat(ops): nginx reverse proxy and production compose`)
+
+## Summary
+
+Production deployment of ServerPulse via single `docker compose up -d`. Added nginx reverse proxy as sole external gateway (port 80), frontend multi-stage Docker build, and updated compose stack to 5 services (postgres, redis, backend, frontend, nginx).
+
+### Result
+- 4 new files created
+- 1 core file modified (`docker-compose.yml`)
+- 2 pre-existing bug fixes (out of scope, discovered during implementation)
+- 5 services healthy after `docker compose up -d`
+- PASS WITH WARNINGS — frontend nginx healthcheck missing (FS8-REQ-06 partial)
+
+## Engram Artifacts (Observation IDs)
+
+| Artifact | Engram ID |
+|----------|-----------|
+| proposal | #3502 |
+| spec | #3504 |
+| design | #3503 |
+| tasks | #3505 |
+| apply-progress | #3506 |
+| bugfix (pre-existing) | #3507 |
+| verify-report | #3509 |
+
+## Archive Contents
+
+| File | Status |
+|------|--------|
+| `sdd/fase-8-nginx-prod/proposal` | Engram only |
+| `sdd/fase-8-nginx-prod/spec` | Filesystem + Engram (#3504) |
+| `sdd/fase-8-nginx-prod/design` | Filesystem + Engram (#3503) |
+| `sdd/fase-8-nginx-prod/tasks` | Engram only (#3505) |
+| `sdd/fase-8-nginx-prod/apply-progress` | Engram only (#3506) |
+| `sdd/fase-8-nginx-prod/verify-report` | Filesystem + Engram (#3509) |
+| **sdd/fase-8-nginx-prod/archive-report** | Filesystem + Engram (this) |
+
+## Specs Compliance
+
+| Requirement | Scenarios | Status |
+|-------------|-----------|--------|
+| FS8-REQ-01: Frontend Multi-Stage Build | 2/2 | ✅ |
+| FS8-REQ-02: Nginx Reverse Proxy Config | 2/2 | ✅ |
+| FS8-REQ-03: Security Headers | 1/1 | ✅ |
+| FS8-REQ-04: Nginx Dockerfile | 1/1 | ✅ |
+| FS8-REQ-05: Production Compose | 2/2 | ✅ |
+| FS8-REQ-06: Service Healthchecks | 1/2 | ⚠️ Partial (frontend healthcheck) |
+| FS8-REQ-07: End-to-End Verification | 1/1 | ✅ |
+| **Total** | **10/11 compliant, 1 partial** | **PASS WITH WARNINGS** |
+
+## Files Changed
+
+### New Files (4)
+| File | Purpose |
+|------|---------|
+| `frontend/nginx-frontend.conf` | SPA fallback (`try_files`), gzip, asset caching |
+| `frontend/Dockerfile` | Multi-stage build: node:20-alpine builder → nginx:alpine serve |
+| `nginx/nginx.conf` | Reverse proxy: WS upgrade, `/api/*` → backend, security headers |
+| `nginx/Dockerfile` | nginx:alpine + custom config |
+
+### Modified Files (1 core + 2 pre-existing fixes)
+| File | Change |
+|------|--------|
+| `docker-compose.yml` | Added frontend + nginx services; removed backend port 8000 exposure |
+| `backend/pyproject.toml` | Pre-existing: added `email-validator>=2.0.0` |
+| `frontend/vite.config.ts` | Pre-existing: added `@` path alias resolver |
+
+## Warnings Carried Forward
+
+1. **Frontend healthcheck** (FS8-REQ-06 partial): nginx:alpine image lacks curl/wget, so frontend service uses `condition: service_started` instead of `service_healthy`. Resolution deferred — nginx healthcheck is not critical since nginx dies fast on misconfig and health is verified via e2e checks.
+
+## Verification Results (Runtime)
+
+| Check | Result |
+|-------|--------|
+| `curl localhost/health` | ✅ 200 `{"status":"ok","db":"ok","redis":"ok"}` |
+| `curl localhost/` | ✅ 200, 424 bytes (frontend SPA HTML) |
+| `curl localhost/servers/abc-123` | ✅ 200 (SPA fallback) |
+| Security headers | ✅ X-Frame-Options, X-Content-Type-Options, HSTS |
+| `curl localhost:8000/health` | ✅ Refused (backend not exposed) |
+| `curl localhost/api/v1/auth/login` | ✅ 405 (FastAPI via proxy) |
+| WS path ordering | ✅ `/api/v1/ws` before `/api/` in nginx.conf |
+| Commit pushed | ✅ 7470cab on origin/main |
+
+## SDD Cycle Complete
+
+- [x] Proposal created (#3502)
+- [x] Spec written (#3504) — 7 requirements, 11 scenarios
+- [x] Design approved (#3503) — nginx multi-stage approach
+- [x] Tasks planned (#3505) — 7 tasks, all completed
+- [x] Implementation applied — 4 new files, 1 modified (commit 7470cab)
+- [x] Pre-existing bugs fixed (email-validator, vite @ alias)
+- [x] Verification passed — PASS WITH WARNINGS (#3509)
+- [x] Archive report written (this)

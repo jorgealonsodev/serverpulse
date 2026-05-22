@@ -1,5 +1,6 @@
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
 from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
 class RegisterRequest(BaseModel):

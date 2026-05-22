@@ -1,0 +1,95 @@
+# Nginx + Production Specification
+
+## Purpose
+
+Production deployment via single `docker compose up -d`. Frontend built as static assets, nginx reverse proxy unifying access on port 80.
+
+## Requirements
+
+### Requirement: Frontend Multi-Stage Build (FS8-REQ-01)
+
+`frontend/Dockerfile` MUST use a multi-stage build. Stage 1 (`node:20-alpine`) installs deps and runs `npm run build`. Stage 2 (`nginx:alpine`) copies `dist/` to nginx html directory. An `nginx.conf` embedded in the frontend image MUST configure SPA fallback with `try_files $uri $uri/ /index.html`.
+
+#### Scenario: Production build produces static assets
+
+- GIVEN the frontend source code
+- WHEN `docker build -t serverpulse-frontend ./frontend` executes
+- THEN the image contains only nginx:alpine with built static files and no node_modules
+
+#### Scenario: SPA routing fallback
+
+- GIVEN the frontend image is running inside nginx
+- WHEN a client requests `/servers/abc-123` directly (not via client-side link)
+- THEN nginx returns `index.html` with HTTP 200, not 404
+
+### Requirement: Nginx Reverse Proxy Config (FS8-REQ-02)
+
+`nginx/nginx.conf` MUST listen on port 80, serve frontend static files as the default location, proxy `/api/` requests to `backend:8000`, and proxy WebSocket connections at `/ws/` (or `/api/v1/ws`) with `Upgrade` and `Connection` headers.
+
+#### Scenario: API requests proxied to backend
+
+- GIVEN nginx and backend services are running
+- WHEN a client sends `GET /api/v1/servers` to port 80
+- THEN nginx proxies the request to `backend:8000` and returns the backend response
+
+#### Scenario: WebSocket connections proxied
+
+- GIVEN nginx and backend services are running
+- WHEN a client opens `WS /api/v1/ws?token=jwt` on port 80
+- THEN nginx proxies the connection with `Upgrade: websocket` and `Connection: upgrade` headers and bidirectional messages flow
+
+### Requirement: Security Headers (FS8-REQ-03)
+
+nginx MUST add the following headers to all HTTP responses: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Strict-Transport-Security: max-age=31536000`.
+
+#### Scenario: Security headers present
+
+- GIVEN nginx is serving requests
+- WHEN any HTTP response is returned
+- THEN the response includes `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, and `Strict-Transport-Security: max-age=31536000`
+
+### Requirement: Nginx Dockerfile (FS8-REQ-04)
+
+`nginx/Dockerfile` MUST be based on `nginx:alpine` and copy `nginx.conf` to `/etc/nginx/nginx.conf`.
+
+#### Scenario: Custom nginx image builds
+
+- GIVEN `nginx/Dockerfile` and `nginx/nginx.conf`
+- WHEN `docker build -t serverpulse-nginx ./nginx` executes
+- THEN the image contains nginx:alpine with the custom config replacing the default
+
+### Requirement: Production Compose (FS8-REQ-05)
+
+`docker-compose.yml` MUST include `frontend` and `nginx` services. The `backend` service MUST NOT expose ports to the host; it MUST only be accessible via the internal `serverpulse_net` network. The `nginx` service MUST expose port 80 to the host.
+
+#### Scenario: Backend not directly accessible
+
+- GIVEN all compose services are running
+- WHEN attempting `curl http://localhost:8000`
+- THEN the connection is refused (port not published)
+
+#### Scenario: Frontend served through nginx
+
+- GIVEN all compose services are running
+- WHEN `curl http://localhost` is executed
+- THEN the frontend SPA HTML is returned
+
+### Requirement: Service Healthchecks (FS8-REQ-06)
+
+All services MUST have Docker healthchecks. `nginx` MUST depend on `backend` with `condition: service_healthy`. Existing backend, postgres, and redis healthchecks MUST remain intact.
+
+#### Scenario: Nginx waits for backend
+
+- GIVEN `docker compose up -d` is executed on a cold start
+- THEN nginx does not start accepting traffic until backend healthcheck passes
+
+### Requirement: End-to-End Verification (FS8-REQ-07)
+
+After `docker compose up -d`, `http://localhost` MUST serve the frontend SPA and `http://localhost/api/health` (or `/health` proxied through nginx) MUST return HTTP 200.
+
+#### Scenario: Full stack verification
+
+- GIVEN a clean host with Docker installed
+- WHEN `docker compose up -d` completes
+- THEN `curl http://localhost` returns frontend HTML
+- AND `curl http://localhost/health` returns 200 with `{"status":"ok"}`

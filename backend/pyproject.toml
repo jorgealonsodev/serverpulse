@@ -25,6 +25,7 @@ dev = [
     "pytest",
     "pytest-asyncio",
     "httpx",
+    "httpx-ws",
     "ruff",
 ]
 
@@ -42,6 +43,10 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
+ignore = [
+    "B008",  # FastAPI Depends() in defaults is standard pattern
+    "E402",  # Router imports after app creation (FastAPI pattern)
+]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

@@ -1,3 +1,4 @@
+import contextlib
 from uuid import UUID
 
 from fastapi import WebSocket
@@ -29,10 +30,8 @@ class ConnectionManager:
         """Send a JSON message to all active connections for a user."""
         if user_id in self.active:
             for ws in self.active[user_id]:
-                try:
+                with contextlib.suppress(Exception):
                     await ws.send_json(message)
-                except Exception:
-                    pass
 
 
 manager = ConnectionManager()

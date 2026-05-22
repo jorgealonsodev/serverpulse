@@ -1,6 +1,7 @@
 import asyncio
+import contextlib
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 from sqlalchemy import select
@@ -29,7 +30,7 @@ class OfflineDetector:
             result = await session.execute(select(Server))
             servers = result.scalars().all()
 
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
 
             for server in servers:
                 is_offline = (
@@ -70,10 +71,8 @@ async def run_offline_detector() -> None:
     detector = OfflineDetector()
     while True:
         await asyncio.sleep(CHECK_INTERVAL)
-        try:
+        with contextlib.suppress(Exception):
             await detector.check_and_alert()
-        except Exception:
-            pass  # log in production
 
 
 detector = OfflineDetector()

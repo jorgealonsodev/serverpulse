@@ -61,3 +61,13 @@ async def client(test_engine):
         yield ac
 
     app.dependency_overrides.clear()
+
+
+@pytest.fixture
+async def ws_client():
+    """Async WebSocket test client for FastAPI app."""
+    from httpx_ws.transport import ASGIWebSocketTransport
+
+    transport = ASGIWebSocketTransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        yield ac

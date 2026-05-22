@@ -1,8 +1,7 @@
 """Metrics integration tests — strict TDD (RED phase first)."""
 
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
-import pytest
 from httpx import AsyncClient
 
 
@@ -19,7 +18,9 @@ async def _create_user_and_login(client: AsyncClient) -> str:
     return login_resp.json()["access_token"]
 
 
-async def _create_server_with_token(client: AsyncClient, token: str, name: str = "test-server") -> dict:
+async def _create_server_with_token(
+    client: AsyncClient, token: str, name: str = "test-server"
+) -> dict:
     """Create a server using JWT auth, return server data including api_token."""
     resp = await client.post(
         "/api/v1/servers/",
@@ -137,7 +138,7 @@ async def test_query_metrics_returns_data(client: AsyncClient):
     )
 
     # Query metrics
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     from_date = now - timedelta(hours=1)
     resp = await client.get(
         f"/api/v1/servers/{server_id}/metrics",
@@ -156,7 +157,7 @@ async def test_query_range_exceeds_24h_returns_400(client: AsyncClient):
     server_data = await _create_server_with_token(client, jwt_token)
     server_id = server_data["id"]
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     from_date = now - timedelta(hours=25)
     resp = await client.get(
         f"/api/v1/servers/{server_id}/metrics",
@@ -188,7 +189,7 @@ async def test_query_user_isolation_returns_404(client: AsyncClient):
     )
     jwt_token_b = login_b.json()["access_token"]
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     from_date = now - timedelta(hours=1)
     resp = await client.get(
         f"/api/v1/servers/{server_id}/metrics",
@@ -203,7 +204,7 @@ async def test_query_nonexistent_server_returns_404(client: AsyncClient):
     jwt_token = await _create_user_and_login(client)
     nonexistent_id = "00000000-0000-0000-0000-000000000000"
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     from_date = now - timedelta(hours=1)
     resp = await client.get(
         f"/api/v1/servers/{nonexistent_id}/metrics",
