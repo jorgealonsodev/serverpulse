@@ -1,0 +1,95 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      - name: Build and push backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/serverpulse-backend:latest
+            ghcr.io/${{ github.repository_owner }}/serverpulse-backend:sha-${{ github.sha }}
+
+      - name: Build and push frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/serverpulse-frontend:latest
+            ghcr.io/${{ github.repository_owner }}/serverpulse-frontend:sha-${{ github.sha }}
+
+      - name: Build and push nginx
+        uses: docker/build-push-action@v6
+        with:
+          context: ./nginx
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/serverpulse-nginx:latest
+            ghcr.io/${{ github.repository_owner }}/serverpulse-nginx:sha-${{ github.sha }}
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_KEY }}
+          script: |
+            cd /opt/serverpulse
+
+            # Store previous SHA for rollback
+            PREV_SHA=""
+            if [ -f .deploy-sha ]; then
+              PREV_SHA=$(cat .deploy-sha)
+            fi
+
+            # Pull new images and restart
+            git pull
+            docker compose pull
+            docker compose up -d --remove-orphans
+            sleep 10
+
+            # Health check with rollback
+            if ! curl -sf http://localhost/health > /dev/null; then
+              echo "Health check failed — rolling back"
+              if [ -n "$PREV_SHA" ]; then
+                echo "Restoring previous version: sha-${PREV_SHA}"
+                docker pull ghcr.io/${{ github.repository_owner }}/serverpulse-backend:sha-${PREV_SHA}
+                docker pull ghcr.io/${{ github.repository_owner }}/serverpulse-frontend:sha-${PREV_SHA}
+                docker pull ghcr.io/${{ github.repository_owner }}/serverpulse-nginx:sha-${PREV_SHA}
+                docker tag ghcr.io/${{ github.repository_owner }}/serverpulse-backend:sha-${PREV_SHA} ghcr.io/${{ github.repository_owner }}/serverpulse-backend:latest
+                docker tag ghcr.io/${{ github.repository_owner }}/serverpulse-frontend:sha-${PREV_SHA} ghcr.io/${{ github.repository_owner }}/serverpulse-frontend:latest
+                docker tag ghcr.io/${{ github.repository_owner }}/serverpulse-nginx:sha-${PREV_SHA} ghcr.io/${{ github.repository_owner }}/serverpulse-nginx:latest
+                docker compose up -d --remove-orphans
+                sleep 10
+                if curl -sf http://localhost/health > /dev/null; then
+                  echo "Rollback successful"
+                else
+                  echo "Rollback health check also failed"
+                  exit 1
+                fi
+              else
+                echo "No previous version available for rollback (first deploy)"
+                exit 1
+              fi
+            fi
+
+            # Record successful deploy SHA
+            echo "${{ github.sha }}" > .deploy-sha
+            docker image prune -f
