@@ -6,7 +6,7 @@
 
 ServerPulse gives you real-time CPU, RAM, disk, network, and load metrics for all your servers. Register an account, add a server with a one-liner, and watch data flow — no config files, no YAML, no SaaS.
 
-![ServerPulse Dashboard](docs/img/dashboard.png)
+![ServerPulse Dashboard](docs/img/dashboard.svg)
 
 ---
 
