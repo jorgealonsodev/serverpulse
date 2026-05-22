@@ -1,10 +1,8 @@
 """Servers CRUD integration tests — strict TDD (RED phase first)."""
 
 from httpx import AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import generate_agent_token, hash_agent_token
-from app.database import get_db
 from app.models.server import Server
 
 # ---------------------------------------------------------------------------
@@ -266,7 +264,8 @@ async def test_regenerate_token_invalidates_old(client, test_engine):
         async with test_engine.connect() as conn:
             from sqlalchemy import select as sa_select
 
-            result = await conn.execute(sa_select(Server.api_token_hash).where(Server.id == server_id))
+            stmt = sa_select(Server.api_token_hash).where(Server.id == server_id)
+            result = await conn.execute(stmt)
             new_hash = result.scalar_one()
             assert new_hash != old_hash
 

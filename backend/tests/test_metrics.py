@@ -3,32 +3,30 @@
 from datetime import UTC, datetime, timedelta
 
 
-async def _create_user_and_login(client, email: str = "metrics-test@example.com") -> str:
+async def _create_user_and_login(c, email: str = "metrics-test@example.com") -> str:
     """Register and login, return JWT access token."""
-    async with client() as c:
-        await c.post(
-            "/api/v1/auth/register",
-            json={"email": email, "password": "securepass123"},
-        )
-        login_resp = await c.post(
-            "/api/v1/auth/login",
-            json={"email": email, "password": "securepass123"},
-        )
-        return login_resp.json()["access_token"]
+    await c.post(
+        "/api/v1/auth/register",
+        json={"email": email, "password": "securepass123"},
+    )
+    login_resp = await c.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": "securepass123"},
+    )
+    return login_resp.json()["access_token"]
 
 
 async def _create_server_with_token(
-    client, token: str, name: str = "test-server"
+    c, token: str, name: str = "test-server"
 ) -> dict:
     """Create a server using JWT auth, return server data including api_token."""
-    async with client() as c:
-        resp = await c.post(
-            "/api/v1/servers/",
-            json={"name": name},
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        assert resp.status_code == 201
-        return resp.json()
+    resp = await c.post(
+        "/api/v1/servers/",
+        json={"name": name},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 201
+    return resp.json()
 
 
 def _valid_metric_payload(**overrides: dict) -> dict:
@@ -230,7 +228,9 @@ async def test_ingest_publishes_to_redis(client):
         api_token = server_data["api_token"]
         server_id = server_data["id"]
 
-        with patch.object(redis_client.redis_client, "publish", new_callable=AsyncMock) as mock_publish:
+        with patch.object(
+            redis_client.redis_client, "publish", new_callable=AsyncMock,
+        ) as mock_publish:
             resp = await c.post(
                 "/api/v1/metrics/ingest",
                 json=_valid_metric_payload(),

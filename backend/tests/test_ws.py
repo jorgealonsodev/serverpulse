@@ -47,12 +47,11 @@ async def _create_server_for_user(user_id, name: str = "test-server"):
 
 async def test_ws_connect_valid_token(client, ws_client_factory):
     """Connect with valid JWT → accepted."""
-    async with client() as c:
+    async with client() as c, ws_client_factory() as ws_client:
         token = await _register_and_login(c)
-        async with ws_client_factory() as ws_client:
-            async with aconnect_ws(f"/api/v1/ws?token={token}", ws_client) as _ws:
-                # Connection accepted — we can receive messages
-                pass
+        async with aconnect_ws(f"/api/v1/ws?token={token}", ws_client) as _ws:
+            # Connection accepted — we can receive messages
+            pass
 
 
 async def test_ws_connect_invalid_token(ws_client_factory):
@@ -86,16 +85,16 @@ async def test_ws_initial_status_on_connect(client, ws_client_factory):
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
         user_id = payload["sub"]
 
-        # Create a server for this user
-        server, _agent_token = await _create_server_for_user(user_id, "initial-status-server")
+    # Create a server for this user (uses global async_session)
+    server, _agent_token = await _create_server_for_user(user_id, "initial-status-server")
 
-        async with ws_client_factory() as ws_client:
-            async with aconnect_ws(f"/api/v1/ws?token={token}", ws_client) as ws:
-                # Should receive initial status_change for the server
-                msg = await asyncio.wait_for(ws.receive_json(), timeout=5.0)
-                assert msg["type"] == "status_change"
-                assert msg["server_id"] == str(server.id)
-                assert msg["status"] in ("online", "offline")
+    async with ws_client_factory() as ws_client:
+        async with aconnect_ws(f"/api/v1/ws?token={token}", ws_client) as ws:
+            # Should receive initial status_change for the server
+            msg = await asyncio.wait_for(ws.receive_json(), timeout=5.0)
+            assert msg["type"] == "status_change"
+            assert msg["server_id"] == str(server.id)
+            assert msg["status"] in ("online", "offline")
 
 
 # ---------------------------------------------------------------------------
@@ -113,44 +112,44 @@ async def test_ws_receive_metric_on_ingest(client, ws_client_factory):
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
         user_id = payload["sub"]
 
-        server, agent_token = await _create_server_for_user(user_id, "metric-ingest-server")
+    server, agent_token = await _create_server_for_user(user_id, "metric-ingest-server")
 
-        async with ws_client_factory() as ws_client:
-            async with aconnect_ws(f"/api/v1/ws?token={token}", ws_client) as ws:
-                # Drain initial status messages
-                try:
-                    while True:
-                        msg = await asyncio.wait_for(ws.receive_json(), timeout=1.0)
-                except TimeoutError:
-                    pass
+    async with client() as c, ws_client_factory() as ws_client:
+        async with aconnect_ws(f"/api/v1/ws?token={token}", ws_client) as ws:
+            # Drain initial status messages
+            try:
+                while True:
+                    msg = await asyncio.wait_for(ws.receive_json(), timeout=1.0)
+            except TimeoutError:
+                pass
 
-                # Ingest a metric via HTTP
-                ingest_resp = await c.post(
-                    "/api/v1/metrics/ingest",
-                    json={
-                        "cpu_percent": 45.2,
-                        "ram_percent": 62.1,
-                        "ram_used_mb": 4096,
-                        "ram_total_mb": 8192,
-                        "disk_percent": 55.0,
-                        "disk_used_gb": 100.0,
-                        "disk_total_gb": 200.0,
-                        "net_rx_bytes": 1024,
-                        "net_tx_bytes": 512,
-                        "uptime_seconds": 3600,
-                        "load_avg_1": 1.5,
-                        "load_avg_5": 1.2,
-                        "load_avg_15": 0.9,
-                    },
-                    headers={"X-Agent-Token": agent_token},
-                )
-                assert ingest_resp.status_code == 202
+            # Ingest a metric via HTTP
+            ingest_resp = await c.post(
+                "/api/v1/metrics/ingest",
+                json={
+                    "cpu_percent": 45.2,
+                    "ram_percent": 62.1,
+                    "ram_used_mb": 4096,
+                    "ram_total_mb": 8192,
+                    "disk_percent": 55.0,
+                    "disk_used_gb": 100.0,
+                    "disk_total_gb": 200.0,
+                    "net_rx_bytes": 1024,
+                    "net_tx_bytes": 512,
+                    "uptime_seconds": 3600,
+                    "load_avg_1": 1.5,
+                    "load_avg_5": 1.2,
+                    "load_avg_15": 0.9,
+                },
+                headers={"X-Agent-Token": agent_token},
+            )
+            assert ingest_resp.status_code == 202
 
-                # Receive the forwarded metric
-                msg = await asyncio.wait_for(ws.receive_json(), timeout=5.0)
-                assert msg["type"] == "metric"
-                assert msg["server_id"] == str(server.id)
-                assert "data" in msg
+            # Receive the forwarded metric
+            msg = await asyncio.wait_for(ws.receive_json(), timeout=5.0)
+            assert msg["type"] == "metric"
+            assert msg["server_id"] == str(server.id)
+            assert "data" in msg
 
 
 # ---------------------------------------------------------------------------
@@ -168,26 +167,26 @@ async def test_ws_status_change_offline(client, ws_client_factory):
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
         user_id = payload["sub"]
 
-        # Create a server with old last_seen_at (simulate offline)
-        async with async_session() as session:
-            server = Server(
-                user_id=user_id,
-                name="offline-server",
-                api_token_hash="dummy-hash",
-                last_seen_at=datetime.now(UTC) - timedelta(minutes=10),
-            )
-            session.add(server)
-            await session.commit()
-            await session.refresh(server)
-            server_id = server.id
+    # Create a server with old last_seen_at (simulate offline)
+    async with async_session() as session:
+        server = Server(
+            user_id=user_id,
+            name="offline-server",
+            api_token_hash="dummy-hash",
+            last_seen_at=datetime.now(UTC) - timedelta(minutes=10),
+        )
+        session.add(server)
+        await session.commit()
+        await session.refresh(server)
+        server_id = server.id
 
-        async with ws_client_factory() as ws_client:
-            async with aconnect_ws(f"/api/v1/ws?token={token}", ws_client) as ws:
-                # Should receive initial status_change showing offline
-                msg = await asyncio.wait_for(ws.receive_json(), timeout=5.0)
-                assert msg["type"] == "status_change"
-                assert msg["server_id"] == str(server_id)
-                assert msg["status"] == "offline"
+    async with ws_client_factory() as ws_client:
+        async with aconnect_ws(f"/api/v1/ws?token={token}", ws_client) as ws:
+            # Should receive initial status_change showing offline
+            msg = await asyncio.wait_for(ws.receive_json(), timeout=5.0)
+            assert msg["type"] == "status_change"
+            assert msg["server_id"] == str(server_id)
+            assert msg["status"] == "offline"
 
 
 # ---------------------------------------------------------------------------
