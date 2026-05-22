@@ -1,0 +1,11 @@
+# Screenshot placeholder
+
+Replace this file with an actual screenshot of the ServerPulse dashboard.
+
+Recommended size: 1920x1080px, PNG format.
+
+To capture:
+1. Run `make up` and open http://localhost
+2. Register a user, add a server, let metrics flow in
+3. Take a screenshot of the dashboard with browser dev tools (Ctrl+Shift+P → "Capture screenshot")
+4. Save as `docs/img/dashboard.png`
