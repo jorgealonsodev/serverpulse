@@ -1,0 +1,192 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" width="960" height="540">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#0e1116"/>
+      <stop offset="100%" stop-color="#141820"/>
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="100%" stop-color="#6366f1"/>
+    </linearGradient>
+    <linearGradient id="cpuLine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#3b82f6" stop-opacity="0.05"/>
+    </linearGradient>
+    <linearGradient id="ramLine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#22c55e" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#22c55e" stop-opacity="0.05"/>
+    </linearGradient>
+    <linearGradient id="diskLine" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f59e0b" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#f59e0b" stop-opacity="0.05"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="960" height="540" fill="url(#bg)"/>
+
+  <!-- Top Bar -->
+  <rect x="0" y="0" width="960" height="48" fill="#1a1c23" opacity="0.95"/>
+  <text x="20" y="31" font-family="Inter, system-ui, sans-serif" font-size="16" font-weight="700" fill="#e5e7eb">ServerPulse</text>
+  <circle cx="870" cy="24" r="14" fill="#1f2937" stroke="#374151" stroke-width="1"/>
+  <text x="870" y="29" font-family="Inter" font-size="11" fill="#9ca3af" text-anchor="middle">J</text>
+  <rect x="895" y="12" width="48" height="24" rx="4" fill="#dc2626" opacity="0.15"/>
+  <text x="919" y="28" font-family="Inter" font-size="10" fill="#ef4444" text-anchor="middle">Logout</text>
+
+  <!-- Sub header -->
+  <text x="20" y="72" font-family="Inter" font-size="12" fill="#6b7280">Dashboard</text>
+  <rect x="790" y="58" width="150" height="32" rx="6" fill="url(#accentGrad)"/>
+  <text x="865" y="79" font-family="Inter" font-size="12" font-weight="600" fill="#fff" text-anchor="middle">+ New Server</text>
+
+  <!-- Server Cards Grid -->
+  <!-- Card 1: web-prod-01 -->
+  <rect x="20" y="88" width="290" height="200" rx="10" fill="#1a1c23" stroke="#2a2d37" stroke-width="1"/>
+  
+  <!-- Status dot pulse -->
+  <circle cx="40" cy="108" r="12" fill="#22c55e" opacity="0.15"/>
+  <circle cx="40" cy="108" r="6" fill="#22c55e" filter="url(#glow)"/>
+  
+  <text x="60" y="110" font-family="Inter" font-size="13" font-weight="600" fill="#e5e7eb">web-prod-01</text>
+  <text x="60" y="126" font-family="Inter" font-size="10" fill="#6b7280">192.168.1.10</text>
+
+  <!-- CPU sparkline -->
+  <polyline points="40,180 62,170 84,172 106,162 128,158 150,160 172,150 194,152 216,145 238,148 260,140 282,142" 
+    fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="40,180 62,170 84,172 106,162 128,158 150,160 172,150 194,152 216,145 238,148 260,140 282,142 282,180 40,180" 
+    fill="url(#cpuLine)"/>
+  
+  <text x="40" y="164" font-family="Inter" font-size="9" fill="#6b7280">CPU</text>
+  <text x="270" y="164" font-family="Inter" font-size="9" fill="#22c55e" text-anchor="end">23%</text>
+
+  <!-- RAM sparkline -->
+  <polyline points="40,224 62,220 84,225 106,215 128,218 150,210 172,212 194,205 196,208 216,202 238,205 260,198 282,200" 
+    fill="none" stroke="#22c55e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="40,224 62,220 84,225 106,215 128,218 150,210 172,212 194,205 196,208 216,202 238,205 260,198 282,200 282,224 40,224" 
+    fill="url(#ramLine)"/>
+  
+  <text x="40" y="208" font-family="Inter" font-size="9" fill="#6b7280">RAM</text>
+  <text x="270" y="208" font-family="Inter" font-size="9" fill="#22c55e" text-anchor="end">52%</text>
+
+  <!-- Bottom info -->
+  <text x="40" y="260" font-family="Inter" font-size="10" fill="#6b7280">Uptime: 12d 7h 42m</text>
+  <text x="40" y="278" font-family="Inter" font-size="10" fill="#6b7280">Last update: 8s ago</text>
+
+  <!-- Card 2: db-master-01 -->
+  <rect x="335" y="88" width="290" height="200" rx="10" fill="#1a1c23" stroke="#2a2d37" stroke-width="1"/>
+  
+  <circle cx="355" cy="108" r="12" fill="#22c55e" opacity="0.15"/>
+  <circle cx="355" cy="108" r="6" fill="#22c55e" filter="url(#glow)"/>
+  
+  <text x="375" y="110" font-family="Inter" font-size="13" font-weight="600" fill="#e5e7eb">db-master-01</text>
+  <text x="375" y="126" font-family="Inter" font-size="10" fill="#6b7280">postgres.internal</text>
+
+  <polyline points="355,180 377,175 399,170 421,172 443,165 465,168 487,160 509,155 531,152 553,158 575,155 597,150" 
+    fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="355,180 377,175 399,170 421,172 443,165 465,168 487,160 509,155 531,152 553,158 575,155 597,150 597,180 355,180" 
+    fill="url(#cpuLine)"/>
+  
+  <text x="355" y="164" font-family="Inter" font-size="9" fill="#6b7280">CPU</text>
+  <text x="585" y="164" font-family="Inter" font-size="9" fill="#f59e0b" text-anchor="end">67%</text>
+
+  <polyline points="355,224 377,218 399,222 421,215 443,220 465,212 487,208 509,210 531,200 553,205 575,198 597,195" 
+    fill="none" stroke="#22c55e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="355,224 377,218 399,222 421,215 443,220 465,212 487,208 509,210 531,200 553,205 575,198 597,195 597,224 355,224" 
+    fill="url(#ramLine)"/>
+  
+  <text x="355" y="208" font-family="Inter" font-size="9" fill="#6b7280">RAM</text>
+  <text x="585" y="208" font-family="Inter" font-size="9" fill="#22c55e" text-anchor="end">32%</text>
+
+  <text x="355" y="260" font-family="Inter" font-size="10" fill="#6b7280">Uptime: 30d 12h 15m</text>
+  <text x="355" y="278" font-family="Inter" font-size="10" fill="#6b7280">Last update: 15s ago</text>
+
+  <!-- Card 3: staging-01 (offline) -->
+  <rect x="650" y="88" width="290" height="200" rx="10" fill="#1a1c23" stroke="#2a2d37" stroke-width="1"/>
+  
+  <circle cx="670" cy="108" r="12" fill="#ef4444" opacity="0.15"/>
+  <circle cx="670" cy="108" r="6" fill="#ef4444"/>
+  
+  <text x="690" y="110" font-family="Inter" font-size="13" font-weight="600" fill="#e5e7eb">staging-01</text>
+  <text x="690" y="126" font-family="Inter" font-size="10" fill="#6b7280">—</text>
+
+  <polyline points="670,180 692,178 714,170 736,165 758,160 780,162 800,155 805,150 810,155 815,145" 
+    fill="none" stroke="#374151" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <text x="670" y="164" font-family="Inter" font-size="9" fill="#6b7280">CPU</text>
+  <text x="900" y="164" font-family="Inter" font-size="9" fill="#6b7280" text-anchor="end">—</text>
+
+  <text x="670" y="208" font-family="Inter" font-size="9" fill="#6b7280">RAM</text>
+  <text x="900" y="208" font-family="Inter" font-size="9" fill="#6b7280" text-anchor="end">—</text>
+
+  <rect x="670" y="145" width="220" height="57" rx="6" fill="#ef4444" opacity="0.08"/>
+  <text x="780" y="170" font-family="Inter" font-size="11" fill="#ef4444" text-anchor="middle">⚠ Server offline</text>
+  <text x="780" y="188" font-family="Inter" font-size="10" fill="#dc2626" opacity="0.7" text-anchor="middle">Last seen 3m ago</text>
+
+  <text x="670" y="260" font-family="Inter" font-size="10" fill="#6b7280">Uptime: Unknown</text>
+  <text x="670" y="278" font-family="Inter" font-size="10" fill="#6b7280">Last update: 3m ago</text>
+
+  <!-- Detail section for web-prod-01 -->
+  <rect x="20" y="304" width="920" height="216" rx="10" fill="#1a1c23" stroke="#2a2d37" stroke-width="1"/>
+  
+  <text x="40" y="332" font-family="Inter" font-size="12" font-weight="600" fill="#e5e7eb">web-prod-01 — Detail</text>
+  
+  <!-- Time range selector -->
+  <rect x="740" y="316" width="52" height="22" rx="4" fill="#3b82f6" opacity="0.15"/>
+  <text x="766" y="331" font-family="Inter" font-size="9" font-weight="600" fill="#3b82f6" text-anchor="middle">1h</text>
+  <rect x="796" y="316" width="52" height="22" rx="4" fill="#1f2937"/>
+  <text x="822" y="331" font-family="Inter" font-size="9" fill="#6b7280" text-anchor="middle">6h</text>
+  <rect x="852" y="316" width="52" height="22" rx="4" fill="#1f2937"/>
+  <text x="878" y="331" font-family="Inter" font-size="9" fill="#6b7280" text-anchor="middle">24h</text>
+
+  <!-- CPU chart -->
+  <text x="40" y="368" font-family="Inter" font-size="10" font-weight="600" fill="#9ca3af">CPU Usage</text>
+  <text x="210" y="368" font-family="Inter" font-size="10" fill="#22c55e">Average: 23%</text>
+  
+  <polyline points="40,400 60,395 80,398 100,390 120,388 140,392 160,385 180,382 200,378 220,375 240,380 260,372 280,370 300,374 320,368 340,365 360,370 380,362 400,358 420,360 440,355 460,358 480,350 500,348" 
+    fill="none" stroke="#3b82f6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="40,400 60,395 80,398 100,390 120,388 140,392 160,385 180,382 200,378 220,375 240,380 260,372 280,370 300,374 320,368 340,365 360,370 380,362 400,358 420,360 440,355 460,358 480,350 500,348 500,400 40,400" 
+    fill="url(#cpuLine)"/>
+  
+  <text x="40" y="414" font-family="Inter" font-size="8" fill="#4b5563" text-anchor="middle">00:00</text>
+  <text x="160" y="414" font-family="Inter" font-size="8" fill="#4b5563" text-anchor="middle">00:15</text>
+  <text x="280" y="414" font-family="Inter" font-size="8" fill="#4b5563" text-anchor="middle">00:30</text>
+  <text x="400" y="414" font-family="Inter" font-size="8" fill="#4b5563" text-anchor="middle">00:45</text>
+  <text x="500" y="414" font-family="Inter" font-size="8" fill="#4b5563" text-anchor="middle">01:00</text>
+
+  <!-- RAM chart -->
+  <text x="40" y="444" font-family="Inter" font-size="10" font-weight="600" fill="#9ca3af">RAM Usage</text>
+  <text x="210" y="444" font-family="Inter" font-size="10" fill="#22c55e">Average: 52%</text>
+
+  <polyline points="40,468 60,465 80,470 100,462 120,460 140,455 160,458 180,450 200,452 220,445 240,448 260,440 280,442 300,438 320,435 340,440 360,432 380,430 400,425 420,428 440,420 460,422 480,418 500,415" 
+    fill="none" stroke="#22c55e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="40,468 60,465 80,470 100,462 120,460 140,455 160,458 180,450 200,452 220,445 240,448 260,440 280,442 300,438 320,435 340,440 360,432 380,430 400,425 420,428 440,420 460,422 480,418 500,415 500,468 40,468" 
+    fill="url(#ramLine)"/>
+
+  <!-- Disk chart -->
+  <text x="540" y="368" font-family="Inter" font-size="10" font-weight="600" fill="#9ca3af">Disk Usage</text>
+  <text x="710" y="368" font-family="Inter" font-size="10" fill="#f59e0b">Average: 65%</text>
+
+  <polyline points="540,400 560,398 580,400 600,399 620,397 640,395 660,393 680,390 700,388 720,385 740,382 760,380 780,378 800,375 820,372 840,370 860,368 880,365 900,363 920,360 940,358" 
+    fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="540,400 560,398 580,400 600,399 620,397 640,395 660,393 680,390 700,388 720,385 740,382 760,380 780,378 800,375 820,372 840,370 860,368 880,365 900,363 920,360 940,358 940,400 540,400" 
+    fill="url(#diskLine)"/>
+
+  <!-- Network chart -->
+  <text x="540" y="444" font-family="Inter" font-size="10" font-weight="600" fill="#9ca3af">Network</text>
+  <text x="710" y="444" font-family="Inter" font-size="10" fill="#3b82f6">RX: 1.2 MB/s</text>
+
+  <polyline points="540,468 560,470 580,465 600,468 620,462 640,466 660,455 680,460 700,458 720,448 740,452 760,445 780,440 800,442 820,438 840,432 860,428 880,425 900,420 920,422 940,418" 
+    fill="none" stroke="#6366f1" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <polyline points="540,468 560,464 580,469 600,462 620,465 640,458 660,462 680,455 700,450 720,453 740,448 760,442 780,445 800,442 820,438 840,435 860,430 880,432 900,428 920,425 940,420" 
+    fill="none" stroke="#8b5cf6" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Actions -->
+  <rect x="20" y="498" width="120" height="14" rx="3" fill="#1f2937"/>
+  <text x="28" y="509" font-family="Inter" font-size="8" fill="#6b7280">Regenerate Token</text>
+  
+  <rect x="150" y="498" width="80" height="14" rx="3" fill="#dc2626" opacity="0.1"/>
+  <text x="158" y="509" font-family="Inter" font-size="8" fill="#ef4444">Delete Server</text>
+</svg>

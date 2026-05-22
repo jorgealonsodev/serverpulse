@@ -47,6 +47,7 @@ ignore = [
     "B008",  # FastAPI Depends() in defaults is standard pattern
     "E402",  # Router imports after app creation (FastAPI pattern)
 ]
+exclude = ["alembic/versions/"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
