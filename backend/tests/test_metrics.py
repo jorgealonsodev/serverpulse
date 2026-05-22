@@ -16,9 +16,7 @@ async def _create_user_and_login(c, email: str = "metrics-test@example.com") -> 
     return login_resp.json()["access_token"]
 
 
-async def _create_server_with_token(
-    c, token: str, name: str = "test-server"
-) -> dict:
+async def _create_server_with_token(c, token: str, name: str = "test-server") -> dict:
     """Create a server using JWT auth, return server data including api_token."""
     resp = await c.post(
         "/api/v1/servers/",
@@ -229,7 +227,9 @@ async def test_ingest_publishes_to_redis(client):
         server_id = server_data["id"]
 
         with patch.object(
-            redis_client.redis_client, "publish", new_callable=AsyncMock,
+            redis_client.redis_client,
+            "publish",
+            new_callable=AsyncMock,
         ) as mock_publish:
             resp = await c.post(
                 "/api/v1/metrics/ingest",

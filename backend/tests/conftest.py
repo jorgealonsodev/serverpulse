@@ -72,6 +72,16 @@ def client(test_engine):
 
 
 @pytest.fixture
+def db_session_factory(test_engine):
+    """Return an async session factory bound to the per-test engine."""
+    return async_sessionmaker(
+        test_engine,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+
+@pytest.fixture
 def ws_client_factory():
     """Factory that creates a WebSocket-capable AsyncClient in the test's event loop.
 

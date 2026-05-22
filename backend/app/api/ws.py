@@ -57,9 +57,7 @@ async def websocket_endpoint(websocket: WebSocket, token: str | None = None) -> 
             await websocket.close(code=4001, reason="User not found")
             return
 
-        result = await session.execute(
-            select(Server).where(Server.user_id == user.id)
-        )
+        result = await session.execute(select(Server).where(Server.user_id == user.id))
         servers = result.scalars().all()
 
     # --- Connect to manager ---
@@ -77,11 +75,13 @@ async def websocket_endpoint(websocket: WebSocket, token: str | None = None) -> 
     for server in servers:
         is_online = server.last_seen_at is not None and (now - server.last_seen_at) < threshold
         status = "online" if is_online else "offline"
-        await websocket.send_json({
-            "type": "status_change",
-            "server_id": str(server.id),
-            "status": status,
-        })
+        await websocket.send_json(
+            {
+                "type": "status_change",
+                "server_id": str(server.id),
+                "status": status,
+            }
+        )
 
     # --- Redis listener task ---
     # Build a lookup of channel -> server_id for wrapping metric messages
@@ -102,11 +102,13 @@ async def websocket_endpoint(websocket: WebSocket, token: str | None = None) -> 
                         if channel in channel_server_map:
                             server_id = channel_server_map[channel]
                             if channel.startswith("metrics:"):
-                                await websocket.send_json({
-                                    "type": "metric",
-                                    "server_id": server_id,
-                                    "data": data,
-                                })
+                                await websocket.send_json(
+                                    {
+                                        "type": "metric",
+                                        "server_id": server_id,
+                                        "data": data,
+                                    }
+                                )
                             else:
                                 # status_change messages already have type field
                                 await websocket.send_json(data)

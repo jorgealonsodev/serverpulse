@@ -8,13 +8,13 @@ from httpx import AsyncClient
 from httpx_ws import aconnect_ws
 
 from app.core.security import hash_agent_token
-from app.database import async_session
 from app.main import app
 from app.models.server import Server
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 async def _register_and_login(
     c: AsyncClient, email: str = "ws@test.com", password: str = "secret123"
@@ -26,9 +26,9 @@ async def _register_and_login(
     return resp.json()["access_token"]
 
 
-async def _create_server_for_user(user_id, name: str = "test-server"):
+async def _create_server_for_user(session_factory, user_id, name: str = "test-server"):
     """Create a server record in the DB for a given user_id."""
-    async with async_session() as session:
+    async with session_factory() as session:
         server = Server(
             user_id=user_id,
             name=name,
@@ -44,6 +44,7 @@ async def _create_server_for_user(user_id, name: str = "test-server"):
 # ---------------------------------------------------------------------------
 # FS5-REQ-01: WS Connection with JWT Auth
 # ---------------------------------------------------------------------------
+
 
 async def test_ws_connect_valid_token(client, ws_client_factory):
     """Connect with valid JWT → accepted."""
@@ -74,7 +75,8 @@ async def test_ws_connect_missing_token(ws_client_factory):
 # FS5-REQ-02: Initial Subscription and Status
 # ---------------------------------------------------------------------------
 
-async def test_ws_initial_status_on_connect(client, ws_client_factory):
+
+async def test_ws_initial_status_on_connect(client, ws_client_factory, db_session_factory):
     """Connect WS → receive initial status_change for each server."""
     from jose import jwt
 
@@ -86,7 +88,11 @@ async def test_ws_initial_status_on_connect(client, ws_client_factory):
         user_id = payload["sub"]
 
     # Create a server for this user (uses global async_session)
-    server, _agent_token = await _create_server_for_user(user_id, "initial-status-server")
+    server, _agent_token = await _create_server_for_user(
+        db_session_factory,
+        user_id,
+        "initial-status-server",
+    )
 
     async with (
         ws_client_factory() as ws_client,
@@ -103,7 +109,8 @@ async def test_ws_initial_status_on_connect(client, ws_client_factory):
 # FS5-REQ-03: Metric Message Forwarding
 # ---------------------------------------------------------------------------
 
-async def test_ws_receive_metric_on_ingest(client, ws_client_factory):
+
+async def test_ws_receive_metric_on_ingest(client, ws_client_factory, db_session_factory):
     """Connect WS → POST ingest → receive metric message."""
     from jose import jwt
 
@@ -114,7 +121,11 @@ async def test_ws_receive_metric_on_ingest(client, ws_client_factory):
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
         user_id = payload["sub"]
 
-    server, agent_token = await _create_server_for_user(user_id, "metric-ingest-server")
+    server, agent_token = await _create_server_for_user(
+        db_session_factory,
+        user_id,
+        "metric-ingest-server",
+    )
 
     async with (
         client() as c,
@@ -161,7 +172,8 @@ async def test_ws_receive_metric_on_ingest(client, ws_client_factory):
 # FS5-REQ-04: Status Change Forwarding
 # ---------------------------------------------------------------------------
 
-async def test_ws_status_change_offline(client, ws_client_factory):
+
+async def test_ws_status_change_offline(client, ws_client_factory, db_session_factory):
     """Set last_seen_at old → receive offline status_change."""
     from jose import jwt
 
@@ -173,7 +185,7 @@ async def test_ws_status_change_offline(client, ws_client_factory):
         user_id = payload["sub"]
 
     # Create a server with old last_seen_at (simulate offline)
-    async with async_session() as session:
+    async with db_session_factory() as session:
         server = Server(
             user_id=user_id,
             name="offline-server",
@@ -200,7 +212,8 @@ async def test_ws_status_change_offline(client, ws_client_factory):
 # FS5-REQ-05: Connection Lifecycle — Multiple Connections
 # ---------------------------------------------------------------------------
 
-async def test_ws_multiple_connections(client, ws_client_factory):
+
+async def test_ws_multiple_connections(client, ws_client_factory, db_session_factory):
     """2 connections for same user → both receive metric."""
     from httpx import AsyncClient as HTTPXAsyncClient
     from httpx_ws.transport import ASGIWebSocketTransport
@@ -214,7 +227,11 @@ async def test_ws_multiple_connections(client, ws_client_factory):
         payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM])
         user_id = payload["sub"]
 
-        server, agent_token = await _create_server_for_user(user_id, "multi-conn-server")
+        server, agent_token = await _create_server_for_user(
+            db_session_factory,
+            user_id,
+            "multi-conn-server",
+        )
 
         # Use separate WS clients to avoid transport sharing issues
         transport1 = ASGIWebSocketTransport(app=app)
@@ -226,43 +243,44 @@ async def test_ws_multiple_connections(client, ws_client_factory):
         ):
             async with aconnect_ws(f"/api/v1/ws?token={token}", ws1_client) as ws1:
                 async with aconnect_ws(f"/api/v1/ws?token={token}", ws2_client) as ws2:
-                        # Verify both connections are tracked
-                        from uuid import UUID
-                        uid = UUID(user_id)
-                        assert uid in manager.active
-                        assert len(manager.active[uid]) == 2
+                    # Verify both connections are tracked
+                    from uuid import UUID
 
-                        # Drain initial status messages from both
-                        for ws in [ws1, ws2]:
-                            try:
-                                while True:
-                                    _msg = await asyncio.wait_for(ws.receive_json(), timeout=1.0)  # noqa: F841
-                            except TimeoutError:
-                                pass
+                    uid = UUID(user_id)
+                    assert uid in manager.active
+                    assert len(manager.active[uid]) == 2
 
-                        # Ingest a metric
-                        ingest_resp = await c.post(
-                            "/api/v1/metrics/ingest",
-                            json={
-                                "cpu_percent": 50.0,
-                                "ram_percent": 70.0,
-                                "ram_used_mb": 5000,
-                                "ram_total_mb": 8192,
-                                "disk_percent": 60.0,
-                                "disk_used_gb": 120.0,
-                                "disk_total_gb": 200.0,
-                                "net_rx_bytes": 2048,
-                                "net_tx_bytes": 1024,
-                                "uptime_seconds": 7200,
-                                "load_avg_1": 2.0,
-                                "load_avg_5": 1.8,
-                                "load_avg_15": 1.5,
-                            },
-                            headers={"X-Agent-Token": agent_token},
-                        )
-                        assert ingest_resp.status_code == 202
+                    # Drain initial status messages from both
+                    for ws in [ws1, ws2]:
+                        try:
+                            while True:
+                                _msg = await asyncio.wait_for(ws.receive_json(), timeout=1.0)  # noqa: F841
+                        except TimeoutError:
+                            pass
 
-                        # At least one connection should receive the metric
-                        msg1 = await asyncio.wait_for(ws1.receive_json(), timeout=5.0)
-                        assert msg1["type"] == "metric"
-                        assert msg1["server_id"] == str(server.id)
+                    # Ingest a metric
+                    ingest_resp = await c.post(
+                        "/api/v1/metrics/ingest",
+                        json={
+                            "cpu_percent": 50.0,
+                            "ram_percent": 70.0,
+                            "ram_used_mb": 5000,
+                            "ram_total_mb": 8192,
+                            "disk_percent": 60.0,
+                            "disk_used_gb": 120.0,
+                            "disk_total_gb": 200.0,
+                            "net_rx_bytes": 2048,
+                            "net_tx_bytes": 1024,
+                            "uptime_seconds": 7200,
+                            "load_avg_1": 2.0,
+                            "load_avg_5": 1.8,
+                            "load_avg_15": 1.5,
+                        },
+                        headers={"X-Agent-Token": agent_token},
+                    )
+                    assert ingest_resp.status_code == 202
+
+                    # At least one connection should receive the metric
+                    msg1 = await asyncio.wait_for(ws1.receive_json(), timeout=5.0)
+                    assert msg1["type"] == "metric"
+                    assert msg1["server_id"] == str(server.id)

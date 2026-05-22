@@ -46,9 +46,7 @@ async def lifespan(app: FastAPI):
             try:
                 async with async_session() as session:
                     cutoff = datetime.now(UTC) - timedelta(hours=24)
-                    await session.execute(
-                        delete(Metric).where(Metric.received_at < cutoff)
-                    )
+                    await session.execute(delete(Metric).where(Metric.received_at < cutoff))
                     await session.commit()
             except Exception:
                 pass  # log in production

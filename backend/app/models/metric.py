@@ -56,6 +56,4 @@ class Metric(Base):
 
     server = relationship("Server", back_populates="metrics")
 
-    __table_args__ = (
-        Index("ix_metrics_server_recorded", "server_id", text("recorded_at DESC")),
-    )
+    __table_args__ = (Index("ix_metrics_server_recorded", "server_id", text("recorded_at DESC")),)

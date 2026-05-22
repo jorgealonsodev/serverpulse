@@ -93,9 +93,7 @@ async def query_server_metrics(
 
     # Validate range
     if to_date - from_date > timedelta(hours=24):
-        raise HTTPException(
-            status_code=400, detail="Time range exceeds 24 hours"
-        )
+        raise HTTPException(status_code=400, detail="Time range exceeds 24 hours")
 
     # Query metrics
     result = await db.execute(

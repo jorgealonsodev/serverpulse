@@ -34,8 +34,7 @@ class OfflineDetector:
 
             for server in servers:
                 is_offline = (
-                    server.last_seen_at is None
-                    or (now - server.last_seen_at) > OFFLINE_THRESHOLD
+                    server.last_seen_at is None or (now - server.last_seen_at) > OFFLINE_THRESHOLD
                 )
 
                 if is_offline and server.id not in self.alerted:
