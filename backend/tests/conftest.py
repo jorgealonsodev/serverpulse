@@ -82,7 +82,7 @@ def db_session_factory(test_engine):
 
 
 @pytest.fixture
-def ws_client_factory():
+def ws_client_factory(db_session_factory):
     """Factory that creates a WebSocket-capable AsyncClient in the test's event loop.
 
     Usage:
@@ -92,10 +92,22 @@ def ws_client_factory():
     """
     from httpx_ws.transport import ASGIWebSocketTransport
 
+    from app.api import ws as ws_module
+
     @asynccontextmanager
     async def _make_ws_client():
+        @asynccontextmanager
+        async def _test_ws_session():
+            async with db_session_factory() as session:
+                yield session
+
+        original_get_ws_session = ws_module._get_ws_session
+        ws_module._get_ws_session = _test_ws_session
         transport = ASGIWebSocketTransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as ac:
-            yield ac
+        try:
+            async with AsyncClient(transport=transport, base_url="http://test") as ac:
+                yield ac
+        finally:
+            ws_module._get_ws_session = original_get_ws_session
 
     return _make_ws_client
