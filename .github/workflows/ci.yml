@@ -11,12 +11,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - run: uv pip install --system ruff
+      - uses: astral-sh/setup-uv@v3
+      - run: uv venv && uv pip install ruff
         working-directory: backend
-      - run: ruff check .
+      - run: uv run ruff check .
         working-directory: backend
-      - run: ruff format --check .
+      - run: uv run ruff format --check .
         working-directory: backend
 
   backend-test:
@@ -41,12 +41,12 @@ jobs:
       AGENT_TOKEN_SALT: ci-test-salt
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-      - run: uv pip install --system -e ".[dev]"
+      - uses: astral-sh/setup-uv@v3
+      - run: uv venv && uv pip install -e ".[dev]"
         working-directory: backend
-      - run: alembic upgrade head
+      - run: uv run alembic upgrade head
         working-directory: backend
-      - run: pytest --cov=app --cov-report=term
+      - run: uv run pytest --cov=app --cov-report=term
         working-directory: backend
 
   frontend-lint:
