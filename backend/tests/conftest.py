@@ -64,10 +64,26 @@ async def client(test_engine):
 
 
 @pytest.fixture
-async def ws_client():
-    """Async WebSocket test client for FastAPI app."""
+def ws_client_factory():
+    """Factory that creates a WebSocket-capable AsyncClient in the test's event loop."""
+    from httpx import AsyncClient
     from httpx_ws.transport import ASGIWebSocketTransport
 
-    transport = ASGIWebSocketTransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as ac:
-        yield ac
+    clients = []
+
+    def _create():
+        transport = ASGIWebSocketTransport(app=app)
+        ac = AsyncClient(transport=transport, base_url="http://test")
+        clients.append(ac)
+        return ac
+
+    yield _create
+
+    # Cleanup all created clients
+    import asyncio
+
+    for ac in clients:
+        try:
+            asyncio.get_running_loop().create_task(ac.aclose())
+        except Exception:
+            pass
