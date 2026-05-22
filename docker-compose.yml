@@ -53,6 +53,11 @@ services:
 
   frontend:
     build: ./frontend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
     networks:
       - serverpulse_net
 
@@ -62,7 +67,7 @@ services:
       - "80:80"
     depends_on:
       frontend:
-        condition: service_started
+        condition: service_healthy
       backend:
         condition: service_healthy
     networks:
